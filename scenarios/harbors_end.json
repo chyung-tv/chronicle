@@ -1,0 +1,168 @@
+{
+  "title": "Harbor's End",
+  "days": 3,
+  "scenes_per_day": 6,
+  "time_labels": ["dawn", "morning", "midday", "afternoon", "evening", "night"],
+  "weather": "overcast, wind rising off the water",
+  "clock": {
+    "storm_in_days": 3,
+    "note": "A storm will hit at the end of day 3. Lena's debt to Ellis is due when it does. Mara's skiff is missing."
+  },
+  "worldview": "A one-street fishing town on a cold Atlantic inlet. People know each other's business and lie anyway. There is no police, only Mara's boathouse keys and Ellis's ledger. Magic does not exist. Violence is rare and remembered.",
+  "locations": [
+    {
+      "id": "bakery",
+      "name": "Vale Bakery",
+      "description": "A narrow shop that still smells of yeast and woodsmoke. The front glass is cracked. A ledger sits under the counter, overdue.",
+      "x": 120,
+      "y": 180
+    },
+    {
+      "id": "inn",
+      "name": "The Salt Lamp",
+      "description": "The town's only inn. Oil lamps, wet coats, Ellis's usual table with a view of the door.",
+      "x": 280,
+      "y": 140
+    },
+    {
+      "id": "quay",
+      "name": "The Quay",
+      "description": "Black water slaps the pilings. Empty rings where a skiff should be tied. Gulls argue over nothing.",
+      "x": 280,
+      "y": 280
+    },
+    {
+      "id": "boathouse",
+      "name": "Quinn Boathouse",
+      "description": "Mara's kingdom of rope, tar, and her late husband's tools. The slip for the skiff is a clean absence.",
+      "x": 420,
+      "y": 260
+    },
+    {
+      "id": "cliff_path",
+      "name": "Cliff Path",
+      "description": "A goat track above the inlet. Spray on the rocks. A cut-down to a hidden cove if you know where to look.",
+      "x": 420,
+      "y": 120
+    },
+    {
+      "id": "mara_cottage",
+      "name": "Mara's Cottage",
+      "description": "One room, swept hard. A table with papers. The bed is made for a man who will not come back.",
+      "x": 120,
+      "y": 80
+    }
+  ],
+  "edges": [
+    ["bakery", "inn"],
+    ["bakery", "quay"],
+    ["inn", "quay"],
+    ["inn", "mara_cottage"],
+    ["quay", "boathouse"],
+    ["boathouse", "cliff_path"],
+    ["cliff_path", "mara_cottage"],
+    ["mara_cottage", "bakery"]
+  ],
+  "actors": [
+    {
+      "id": "lena",
+      "name": "Lena Vale",
+      "location": "bakery",
+      "voice": "Soft, precise, as if counting coins while speaking. She rarely raises her voice; when she does it is already too late.",
+      "want": "Keep her father's bakery. Pay Ellis without selling the shop. Some quieter life with Tomas if the debt ever ends.",
+      "secret": "She has been meeting Tomas after closing for three months. She has not told Mara, who once treated her like a niece.",
+      "constitution": "Loyal to the shop and to people she loves, sometimes past sense. Hates being cornered. Will lie to keep a room standing. Not a killer by habit — but she has a temper when someone takes what is hers.",
+      "goal": "Find a way to pay Ellis before the storm.",
+      "mood": "tight"
+    },
+    {
+      "id": "tomas",
+      "name": "Tomas Reed",
+      "location": "quay",
+      "voice": "Easy charm with a fisherman's rasp. Jokes first. Truth late, if at all.",
+      "want": "A boat of his own and to leave this inlet with Lena before Ellis owns her mornings.",
+      "secret": "He stole Mara's skiff last night and hid it in the cove below the cliff path, on Ellis's suggestion that they would fence it and split the money.",
+      "constitution": "Reckless, affectionate, allergic to being caught. He underestimates how long secrets keep in a small town. He will run before he confesses.",
+      "goal": "Keep the skiff hidden until he can sell it or sail it.",
+      "mood": "wired"
+    },
+    {
+      "id": "mara",
+      "name": "Mara Quinn",
+      "location": "boathouse",
+      "voice": "Dry, clipped, harbor-master authority. She names things accurately.",
+      "want": "Get her husband's skiff back and see the thief named in public.",
+      "secret": "She already suspects Tomas. In her cottage is a letter she has not shown anyone: she saw Lena leaving the quay with him two nights ago, and she wrote it down so grief would not sand it away.",
+      "constitution": "Proud, exact, slow to forgive. She loved her husband and the boat he built. She is not cruel for sport, but she will not be made a fool.",
+      "goal": "Find who took the skiff before the storm wrecks the chance.",
+      "mood": "cold"
+    },
+    {
+      "id": "ellis",
+      "name": "Ellis Crowe",
+      "location": "inn",
+      "voice": "Pleasant as a closed ledger. He smiles with his mouth. He never hurries a collection.",
+      "want": "Take the bakery when the storm hits if Lena cannot pay. Respect, which he counts in paper.",
+      "secret": "He told Tomas to steal Mara's skiff. He means to keep the money and still call in Lena's debt. He will deny the suggestion if asked.",
+      "constitution": "Patient predator. Prefers signatures to bruises. If a plan slips he becomes suddenly personal.",
+      "goal": "Keep Lena frightened and Tomas useful until the debt comes due.",
+      "mood": "satisfied"
+    }
+  ],
+  "objects": [
+    {
+      "id": "cleaver",
+      "name": "baker's cleaver",
+      "description": "Heavy, honed, hanging by the oven. Lena uses it for marrow bones.",
+      "location_id": "bakery",
+      "hidden": false
+    },
+    {
+      "id": "ledger",
+      "name": "debt ledger",
+      "description": "Ellis's copy of Lena's debt, due when the storm hits. The last line is already written in a darker ink: premises.",
+      "location_id": "inn",
+      "hidden": false
+    },
+    {
+      "id": "affair_letter",
+      "name": "Mara's letter",
+      "description": "Mara's own hand: Lena and Tomas on the quay after midnight, two nights ago. She names them. She has not sent it.",
+      "location_id": "mara_cottage",
+      "hidden": true
+    },
+    {
+      "id": "stolen_skiff",
+      "name": "the missing skiff",
+      "description": "Mara's husband's boat, scraped under the cliff. Tomas's scarf is snagged on a cleat.",
+      "location_id": "cliff_path",
+      "hidden": true
+    }
+  ],
+  "relationships": [
+    {"a": "lena", "b": "tomas", "trust": 7, "resentment": 1, "notes": "lovers; she thinks he will help with the debt"},
+    {"a": "tomas", "b": "lena", "trust": 6, "resentment": 0, "notes": "he wants to take her away; he has not told her about the skiff"},
+    {"a": "lena", "b": "ellis", "trust": -3, "resentment": 6, "notes": "he holds the debt"},
+    {"a": "ellis", "b": "lena", "trust": 1, "resentment": 0, "notes": "useful collateral"},
+    {"a": "lena", "b": "mara", "trust": 5, "resentment": 0, "notes": "almost family; Lena is lying to her"},
+    {"a": "mara", "b": "lena", "trust": 2, "resentment": 3, "notes": "fondness soured by what she wrote in the letter"},
+    {"a": "mara", "b": "tomas", "trust": -2, "resentment": 5, "notes": "suspects him for the skiff"},
+    {"a": "tomas", "b": "mara", "trust": 0, "resentment": 2, "notes": "afraid of her eyes"},
+    {"a": "tomas", "b": "ellis", "trust": 1, "resentment": 2, "notes": "bad deal, not yet broken"},
+    {"a": "ellis", "b": "tomas", "trust": -1, "resentment": 0, "notes": "expendable hands"},
+    {"a": "mara", "b": "ellis", "trust": -1, "resentment": 2, "notes": "she does not like moneylenders on her quay"},
+    {"a": "ellis", "b": "mara", "trust": 0, "resentment": 1, "notes": "she cannot be bought cheaply"}
+  ],
+  "opening_events": [
+    {
+      "kind": "world",
+      "summary": "Mara's skiff is gone from the quay. A storm is three days out. Lena's debt to Ellis comes due when it hits.",
+      "perceive": ["lena", "tomas", "mara", "ellis"]
+    },
+    {
+      "kind": "world",
+      "summary": "The empty rings on the pilings are already the town's main subject. Nobody has a name for the thief yet.",
+      "perceive": ["lena", "tomas", "mara", "ellis"]
+    }
+  ]
+}

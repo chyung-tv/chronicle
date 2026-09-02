@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Play Out</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1 id="title">Play Out</h1>
+      <p class="sub" id="clock"></p>
+    </div>
+    <div class="controls">
+      <button id="btn-tick" type="button">Play scene</button>
+      <button id="btn-day" type="button">Play day</button>
+      <button id="btn-reset" type="button" class="ghost">Reset world</button>
+      <span id="llm-mode" class="pill"></span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="panel map-panel">
+      <h2>Town</h2>
+      <svg id="map" viewBox="0 0 540 360" role="img" aria-label="Town map"></svg>
+      <p class="weather" id="weather"></p>
+    </section>
+
+    <section class="panel tape-panel">
+      <h2>Event tape</h2>
+      <ol id="tape" class="tape"></ol>
+    </section>
+
+    <section class="panel side">
+      <div class="tabs">
+        <button type="button" data-tab="diaries" class="on">Diaries</button>
+        <button type="button" data-tab="chapters">Chapters</button>
+        <button type="button" data-tab="intents">Intents</button>
+        <button type="button" data-tab="people">People</button>
+      </div>
+      <div id="tab-diaries" class="tab-body"></div>
+      <div id="tab-chapters" class="tab-body hidden"></div>
+      <div id="tab-intents" class="tab-body hidden"></div>
+      <div id="tab-people" class="tab-body hidden"></div>
+    </section>
+  </main>
+
+  <footer class="god">
+    <form id="form-inject">
+      <label>World event
+        <input name="inject" placeholder="A meteor strikes the quay" autocomplete="off" />
+      </label>
+      <button type="submit">Inject</button>
+    </form>
+    <form id="form-steer">
+      <label>Steer intent
+        <input name="steer" placeholder="Mara should ruin Tomas" autocomplete="off" />
+      </label>
+      <button type="submit">Steer</button>
+    </form>
+    <p class="hint">Canon is sealed. You can change tomorrow, not yesterday. Steer invents motive and pressure; characters still choose.</p>
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>
