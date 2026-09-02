@@ -88,6 +88,9 @@ class LLM:
             return extract_json(raw)
         except Exception:
             raw2 = self.complete(
-                system, user + "\n\nReturn ONLY JSON.", strong=strong, temperature=0.2
+                system,
+                user + "\n\n只回傳 JSON。勿加說明。",
+                strong=strong,
+                temperature=0.2,
             )
             return extract_json(raw2)

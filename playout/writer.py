@@ -8,40 +8,45 @@ from typing import Any
 from playout.canon import World
 from playout.llm import LLM
 from playout.models import WriterChapter
+from playout.zh import with_prose
 
-WRITER_SYSTEM = """You are a novelist retelling a simulation log. You may compress, skip breakfast, choose one POV.
-You may NOT invent events, deaths, kisses, discoveries, or dialogue that is not in the log.
-Every factual beat must be supportable by a cited event id.
-If nobody died, do not write a death.
-If someone spoke, you may polish the wording slightly but keep the meaning.
+WRITER_SYSTEM = with_prose("""你是小說家，重述一份模擬日誌。可以壓縮、略過早飯、選定一個視角。
+不可捏造日誌裡沒有的事件、死亡、親吻、發現或對白。
+每一樁事實都須能被所引的 event id 支撐。
+當日無人死，就不要寫死。
+有人說過話，用詞可稍加打磨，意思不可改。
 
-Return JSON:
-{"pov":"<actor_id>","tags":["betrayal","storm"],"cited_event_ids":[1,2,3],"text":"markdown chapter, 400-800 words"}
-"""
+只回傳 JSON：
+{"pov":"<actor_id>","tags":["背叛","颱風"],"cited_event_ids":[1,2,3],"text":"章回正文，繁體中文書面，約四百至八百字"}
+""")
 
-DEATH_WORDS = re.compile(r"\b(killed|kills|murdered|dead|dies|died|corpse|body)\b", re.I)
+DEATH_WORDS = re.compile(
+    r"\b(killed|kills|murdered|dead|dies|died|corpse|body)\b|"
+    r"殺死|殺害|殺了|死了|屍體|身亡|斃命",
+    re.I,
+)
 
 
 def _sift_tags(summaries: list[str]) -> list[str]:
     blob = " ".join(summaries).lower()
     tags = []
     for tag, keys in {
-        "violence": ["attack", "kill", "injured"],
-        "discovery": ["examines", "letter", "finds", "searches"],
-        "departure": ["goes to"],
-        "talk": ["to "],
-        "world": ["storm", "meteor", "ruined"],
-        "steer": ["motive", "weapon", "alone"],
+        "暴力": ["attack", "kill", "injured", "襲擊", "殺", "傷"],
+        "發現": ["examines", "letter", "finds", "searches", "察看", "信", "搜"],
+        "離去": ["goes to", "前往"],
+        "對談": ["對", "道：「"],
+        "世變": ["storm", "meteor", "ruined", "颱風", "隕石", "已毀"],
+        "導引": ["motive", "weapon", "alone", "動機", "刀", "獨處"],
     }.items():
         if any(k in blob for k in keys):
             tags.append(tag)
-    return tags or ["slice"]
+    return tags or ["日常"]
 
 
 def _heuristic_chapter(world: World, day: int, events: list) -> WriterChapter:
     living = [a for a in world.living_actors()]
     pov = living[day % len(living)]["id"] if living else "lena"
-    pov_name = world.actor(pov)["name"] if living else "Someone"
+    pov_name = world.actor(pov)["name"] if living else "有人"
     lines = []
     cited = []
     skip_kinds = {"wait"}
@@ -52,13 +57,15 @@ def _heuristic_chapter(world: World, day: int, events: list) -> WriterChapter:
         lines.append(f"{e['summary']}")
     tags = _sift_tags([e["summary"] for e in events])
     if not lines:
-        text = f"{pov_name} passes a quiet span of day {day}. The weather holds its breath. Nothing of note is written because nothing of note occurred."
+        text = (
+            f"{pov_name}度過第{day}日一段無事的光陰。天色憋著。無事可記，因為無事發生。"
+        )
     else:
         body = " ".join(lines[:18])
         text = (
-            f"Day {day}, from {pov_name}'s side of the glass.\n\n"
-            f"The town does not pause for anyone. {body}\n\n"
-            f"What happened is what happened. The rest is weather."
+            f"第{day}日，從{pov_name}這一側看。\n\n"
+            f"鎮不為誰停。{body}\n\n"
+            f"發生的，便已發生。其餘是天色。"
         )
     return WriterChapter(pov=pov, tags=tags, cited_event_ids=cited, text=text)
 
@@ -72,10 +79,15 @@ def validate_chapter(world: World, day: int, chapter: WriterChapter) -> WriterCh
     deaths = world.death_events()
     death_ids = {e["id"] for e in deaths}
     day_death = any(e["day"] == day for e in deaths)
-    if DEATH_WORDS.search(chapter.text) and not day_death and not (set(cited) & death_ids):
-        # Strip invented death: rewrite last paragraph note rather than inventing.
-        chapter.text = DEATH_WORDS.sub("fell silent", chapter.text)
-        chapter.tags = [t for t in chapter.tags if t != "violence"] + ["grounded"]
+    if (
+        DEATH_WORDS.search(chapter.text)
+        and not day_death
+        and not (set(cited) & death_ids)
+    ):
+        chapter.text = DEATH_WORDS.sub("默然", chapter.text)
+        chapter.tags = [t for t in chapter.tags if t not in ("violence", "暴力")] + [
+            "有據"
+        ]
     return chapter
 
 
@@ -92,7 +104,11 @@ def write_day(world: World, llm: LLM, day: int) -> dict[str, Any]:
         for e in events
     ]
     if llm.mode == "live" and tape:
-        user = f"Day {day} event tape (canon):\n{tape}\nActors: {[{'id':a['id'],'name':a['name']} for a in world.cx.execute('SELECT id,name FROM actors')]}"
+        actors = [
+            {"id": a["id"], "name": a["name"]}
+            for a in world.cx.execute("SELECT id,name FROM actors")
+        ]
+        user = f"第{day}日事件帶（正史）：\n{tape}\n人物：{actors}"
         data = llm.complete_json(WRITER_SYSTEM, user, strong=True)
         try:
             chapter = WriterChapter.model_validate(data)
@@ -101,5 +117,7 @@ def write_day(world: World, llm: LLM, day: int) -> dict[str, Any]:
     else:
         chapter = _heuristic_chapter(world, day, events)
     chapter = validate_chapter(world, day, chapter)
-    cid = world.write_chapter(day, chapter.pov, chapter.text, chapter.tags, chapter.cited_event_ids)
+    cid = world.write_chapter(
+        day, chapter.pov, chapter.text, chapter.tags, chapter.cited_event_ids
+    )
     return {"chapter_id": cid, **chapter.model_dump()}

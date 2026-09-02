@@ -34,10 +34,16 @@ def test_three_day_playtest_with_steer(tmp_path):
         if not kills:
             assert "killed Tomas" not in ch["text"]
             assert "kills Tomas" not in ch["text"]
+            assert "殺死張渡" not in ch["text"]
+            assert "殺了張渡" not in ch["text"]
 
-    steer_events = [e for e in sim.world.all_events() if str(e["kind"]).startswith("steer_")]
+    steer_events = [
+        e for e in sim.world.all_events() if str(e["kind"]).startswith("steer_")
+    ]
     assert steer_events, "steer campaign should inject stimuli"
-    assert sim.world.actor("mara")["goal"] == mara_goal_before or True  # may self-update from perception
+    assert (
+        sim.world.actor("mara")["goal"] == mara_goal_before or True
+    )  # may self-update from perception
     # Puppet check: steer must not have written a kill event itself
     for e in steer_events:
         assert e["kind"] != "kill"
@@ -47,6 +53,6 @@ def test_three_day_playtest_with_steer(tmp_path):
 
     # sealed tape still intact
     n = len(sim.world.all_events())
-    sim.world.append_event("world", "The third day ends.")
+    sim.world.append_event("world", "第三日盡。")
     assert len(sim.world.all_events()) == n + 1
     sim.world.close()

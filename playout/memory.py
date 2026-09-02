@@ -8,11 +8,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from playout.canon import World
 
-_WORD = re.compile(r"[a-z0-9']+")
+_WORD = re.compile(r"[a-z0-9']+|[\u4e00-\u9fff]")
 
 
 def _tokens(text: str) -> set[str]:
-    return set(_WORD.findall(text.lower()))
+    raw = text.lower()
+    toks = set(_WORD.findall(raw))
+    cjk = re.findall(r"[\u4e00-\u9fff]", text)
+    toks.update(cjk[i] + cjk[i + 1] for i in range(len(cjk) - 1))
+    return toks
 
 
 def retrieve(world: World, actor_id: str, query: str, k: int = 8) -> list[str]:
@@ -25,6 +29,6 @@ def retrieve(world: World, actor_id: str, query: str, k: int = 8) -> list[str]:
         importance = row["importance"] / 10.0
         overlap = len(q & _tokens(row["text"])) / max(len(q), 1)
         score = 0.5 * recency + 0.3 * importance + 0.2 * overlap
-        scored.append((score, f"Day {row['day']} {row['text']}"))
+        scored.append((score, f"第{row['day']}日 {row['text']}"))
     scored.sort(reverse=True)
     return [t for _, t in scored[:k]]

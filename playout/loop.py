@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
 from typing import Any
@@ -81,11 +82,17 @@ class Simulation:
         self.world.set_meta("idle_scenes", str(idle))
         if idle < 3:
             return None
-        clock = self.world.meta("clock") or ""
+        raw = self.world.meta("clock") or ""
+        try:
+            parsed = json.loads(raw) if raw else {}
+            note = parsed.get("note") if isinstance(parsed, dict) else str(parsed)
+        except json.JSONDecodeError:
+            note = raw
+        note = note or "颱風將至。"
         return inject_world_event(
             self.world,
             self.llm,
-            f"The incoming storm reminds the town: {clock}. Thunder over the cliff path. Nobody can pretend the skiff will wait.",
+            f"颱風將至，鎮上記得：{note} 雷在崖路上。沒有人能假裝舢板還會自己回來。",
             kind="world",
         )
 
@@ -111,7 +118,7 @@ class Simulation:
                     self.world,
                     self.llm,
                     target,
-                    extra="You were just spoken to or attacked. React. You may speak, attack, wait, or leave.",
+                    extra="有人剛對你說話，或剛動手。你須反應。可以開口、還手、等候，或離開。",
                 )
         pressure = self._auto_pressure()
         steer = tick_intents(self.world)

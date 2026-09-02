@@ -22,11 +22,13 @@ def test_writer_strips_invented_death(world):
         pov="lena",
         tags=["violence"],
         cited_event_ids=[1],
-        text="Then Mara killed Tomas in the boathouse. The corpse cooled.",
+        text="Then Mara killed Tomas in the boathouse. The corpse cooled. 然後關瑪在船寮殺了張渡。屍體涼了。",
     )
     out = validate_chapter(world, 1, fake)
     assert "killed" not in out.text.lower()
     assert "corpse" not in out.text.lower()
+    assert "殺了" not in out.text
+    assert "屍體" not in out.text
 
 
 def test_writer_chapter_cites_tape(world):

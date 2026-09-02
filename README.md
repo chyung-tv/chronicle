@@ -2,7 +2,11 @@
 
 A small sealed-canon story simulation. You design a town, let characters act, inject world events, and **steer** future plot without rewriting what already happened.
 
-Harbor's End ships as the first pressure-cooker: four people, six places, a stolen skiff, an affair, a storm in three days.
+The sim writes in **Taiwan Traditional Chinese** (書面語 for narration, diaries, tape, and chapters; spoken register for dialogue). IDs stay English.
+
+Harbor's End / 港尾 ships as the first pressure-cooker: four people, six places, a stolen skiff, an affair, a storm in three days.
+
+If you already have a `playout.db` from an English seed, **Reset world** in the UI (or delete the database) so the Chinese scenario loads.
 
 ## Run
 
@@ -21,8 +25,8 @@ Without an API key the sim uses a heuristic mock LLM so the loop still runs. For
 
 - **Canon** is SQLite. The event tape, diaries, and chapters are append-only.
 - **Actors** only see their own perceptions. They choose structured actions; a referee applies them.
-- **Storyteller** turns "a meteor strikes the quay" into state patches (ruin the quay, injure who is there, perceptions).
-- **Steer** turns "Mara should ruin Tomas" into a campaign of motive / means / opportunity / escalation. It never writes a kill, never overwrites a goal, never edits the past. Soft: the outcome can fail.
+- **Storyteller** turns "隕石擊中碼頭" into state patches (ruin the quay, injure who is there, perceptions).
+- **Steer** turns "關瑪應當毀了張渡" into a campaign of motive / means / opportunity / escalation. It never writes a kill, never overwrites a goal, never edits the past. Soft: the outcome can fail.
 - **Writer** retells each day from the tape. No rewrite box.
 
 ## Tests

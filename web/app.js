@@ -1,6 +1,44 @@
 const $ = (sel) => document.querySelector(sel);
 const colors = ["#e7d8b8", "#8eb3b0", "#d4a574", "#c97b84"];
 
+const KIND = {
+  wait: "等候",
+  move: "前往",
+  speak: "對白",
+  take: "取物",
+  drop: "放下",
+  examine: "察看",
+  attack: "襲擊",
+  kill: "殺死",
+  attempted_kill: "欲殺不成",
+  world: "世變",
+  world_kill: "世變致死",
+  steer_motive: "導引·動機",
+  steer_means: "導引·手段",
+  steer_opportunity: "導引·時機",
+  steer_escalation: "導引·加壓",
+  failed_move: "未成行",
+  failed_speak: "未成言",
+  failed_attack: "未成擊",
+  write_note: "寫紙",
+};
+
+const STATUS = {
+  brewing: "醞釀中",
+  attempted: "已著手",
+  succeeded: "已成",
+  failed: "失敗",
+  pending: "未發",
+  injected: "已注入",
+};
+
+const RUNG = {
+  motive: "動機",
+  means: "手段",
+  opportunity: "時機",
+  escalation: "加壓",
+};
+
 let state = null;
 let busy = false;
 
@@ -22,12 +60,30 @@ async function refresh() {
   render();
 }
 
+function locName(id) {
+  const l = (state.locations || []).find((x) => x.id === id);
+  return l ? l.name : id;
+}
+
+function actorName(id) {
+  const a = (state.actors || []).find((x) => x.id === id);
+  return a ? a.name : id;
+}
+
+function kindLabel(kind) {
+  return KIND[kind] || kind;
+}
+
+function statusLabel(status) {
+  return STATUS[status] || status;
+}
+
 function render() {
-  $("#title").textContent = state.title || "Play Out";
-  $("#clock").textContent = `Day ${state.day} · ${state.time_label} · scene ${state.scene + 1}/${state.scenes_per_day} · storm clock: ${state.clock?.note || ""}`;
+  $("#title").textContent = state.title || "演繹";
+  $("#clock").textContent = `第${state.day}日 · ${state.time_label} · 第 ${state.scene + 1}/${state.scenes_per_day} 場 · 風期：${state.clock?.note || ""}`;
   $("#weather").textContent = state.weather || "";
   $("#llm-mode").textContent =
-    state.llm_mode === "live" ? state.llm_model || "openrouter" : "mock llm";
+    state.llm_mode === "live" ? state.llm_model || "openrouter" : "模擬語言模型";
   renderMap();
   renderTape();
   renderDiaries();
@@ -75,7 +131,7 @@ function renderTape() {
     .reverse()
     .map(
       (e) => `<li class="kind-${e.kind}">
-        <div class="meta">D${e.day} ${e.kind} #${e.id}</div>
+        <div class="meta">第${e.day}日 ${kindLabel(e.kind)} #${e.id}</div>
         <div>${esc(e.summary)}</div>
       </li>`
     )
@@ -87,9 +143,9 @@ function renderDiaries() {
   el.innerHTML = state.actors
     .map((a) => {
       const entries = (state.diaries[a.id] || [])
-        .map((d) => `<p class="entry">D${d.day}: ${esc(d.text)}</p>`)
+        .map((d) => `<p class="entry">第${d.day}日：${esc(d.text)}</p>`)
         .join("");
-      return `<h3>${esc(a.name)}</h3>${entries || "<p class='entry'>(blank)</p>"}`;
+      return `<h3>${esc(a.name)}</h3>${entries || "<p class='entry'>（空白）</p>"}`;
     })
     .join("");
 }
@@ -97,12 +153,12 @@ function renderDiaries() {
 function renderChapters() {
   const el = $("#tab-chapters");
   if (!state.chapters.length) {
-    el.innerHTML = "<p class='entry'>Chapters appear when a day rolls over.</p>";
+    el.innerHTML = "<p class='entry'>章回於一日終了時寫成。</p>";
     return;
   }
   el.innerHTML = state.chapters
     .map(
-      (c) => `<h3>Day ${c.day} · ${esc(c.pov)} · ${c.tags.join(", ")}</h3>
+      (c) => `<h3>第${c.day}日 · ${esc(actorName(c.pov))} · ${c.tags.join("、")}</h3>
       <div class="chapter">${esc(c.text)}</div>`
     )
     .join("");
@@ -111,16 +167,16 @@ function renderChapters() {
 function renderIntents() {
   const el = $("#tab-intents");
   if (!state.intents.length) {
-    el.innerHTML = "<p class='entry'>No active steer. Submit a future you want to become likely.</p>";
+    el.innerHTML = "<p class='entry'>尚無導引。寫下一則你希望變得可能的未來。</p>";
     return;
   }
   el.innerHTML = state.intents
     .map((i) => {
       const rungs = (i.campaign.rungs || [])
-        .map((r) => `${r.id}: ${r.status}`)
+        .map((r) => `${RUNG[r.id] || r.id}：${statusLabel(r.status)}`)
         .join(" · ");
       return `<div class="intent">
-        <div class="status ${i.status}">${i.status}</div>
+        <div class="status ${i.status}">${statusLabel(i.status)}</div>
         <p>${esc(i.text)}</p>
         <p class="entry">${esc(i.campaign.summary || "")}</p>
         <p class="entry">${esc(rungs)}</p>
@@ -133,12 +189,12 @@ function renderPeople() {
   const el = $("#tab-people");
   el.innerHTML = state.actors
     .map(
-      (a) => `<h3>${esc(a.name)} ${a.alive ? "" : "(dead)"} ${a.injured ? "· injured" : ""}</h3>
-        <p class="entry"><b>At</b> ${esc(a.location_id)} · <b>Mood</b> ${esc(a.mood)}</p>
-        <p class="entry"><b>Goal</b> ${esc(a.goal)}</p>
-        <p class="entry"><b>Want</b> ${esc(a.want)}</p>
-        <p class="entry"><b>Secret</b> ${esc(a.secret)}</p>
-        <p class="entry"><b>Carrying</b> ${a.inventory.map((o) => o.name).join(", ") || "nothing"}</p>`
+      (a) => `<h3>${esc(a.name)} ${a.alive ? "" : "（已歿）"} ${a.injured ? "· 帶傷" : ""}</h3>
+        <p class="entry"><b>所在</b> ${esc(locName(a.location_id))} · <b>心境</b> ${esc(a.mood)}</p>
+        <p class="entry"><b>眼前之願</b> ${esc(a.goal)}</p>
+        <p class="entry"><b>深願</b> ${esc(a.want)}</p>
+        <p class="entry"><b>秘密</b> ${esc(a.secret)}</p>
+        <p class="entry"><b>隨身</b> ${a.inventory.map((o) => o.name).join("、") || "空手"}</p>`
     )
     .join("");
 }
@@ -180,7 +236,7 @@ $("#btn-day").addEventListener("click", async () => {
 });
 
 $("#btn-reset").addEventListener("click", async () => {
-  if (!confirm("This wipes the tape and starts Harbor's End again.")) return;
+  if (!confirm("這會抹去事件帶，重新開始「港尾」。")) return;
   setBusy(true);
   try {
     await api("/api/reset", { method: "POST" });
@@ -229,5 +285,5 @@ $("#form-steer").addEventListener("submit", async (ev) => {
 });
 
 refresh().catch((err) => {
-  $("#clock").textContent = "Could not load world: " + err.message;
+  $("#clock").textContent = "無法載入世界：" + err.message;
 });

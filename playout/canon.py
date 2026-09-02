@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS steer_intents (
 );
 """
 
-TIME_LABELS = ["dawn", "morning", "midday", "afternoon", "evening", "night"]
+TIME_LABELS = ["黎明", "上午", "正午", "午後", "黃昏", "夜"]
 
 
 class CanonError(Exception):

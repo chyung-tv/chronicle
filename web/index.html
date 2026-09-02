@@ -1,43 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Play Out</title>
+  <title>演繹</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
   <header class="top">
     <div>
-      <h1 id="title">Play Out</h1>
+      <h1 id="title">演繹</h1>
       <p class="sub" id="clock"></p>
     </div>
     <div class="controls">
-      <button id="btn-tick" type="button">Play scene</button>
-      <button id="btn-day" type="button">Play day</button>
-      <button id="btn-reset" type="button" class="ghost">Reset world</button>
+      <button id="btn-tick" type="button">演一場</button>
+      <button id="btn-day" type="button">演一日</button>
+      <button id="btn-reset" type="button" class="ghost">重置世界</button>
       <span id="llm-mode" class="pill"></span>
     </div>
   </header>
 
   <main class="grid">
     <section class="panel map-panel">
-      <h2>Town</h2>
-      <svg id="map" viewBox="0 0 540 360" role="img" aria-label="Town map"></svg>
+      <h2>鎮</h2>
+      <svg id="map" viewBox="0 0 540 360" role="img" aria-label="鎮圖"></svg>
       <p class="weather" id="weather"></p>
     </section>
 
     <section class="panel tape-panel">
-      <h2>Event tape</h2>
+      <h2>事件帶</h2>
       <ol id="tape" class="tape"></ol>
     </section>
 
     <section class="panel side">
       <div class="tabs">
-        <button type="button" data-tab="diaries" class="on">Diaries</button>
-        <button type="button" data-tab="chapters">Chapters</button>
-        <button type="button" data-tab="intents">Intents</button>
-        <button type="button" data-tab="people">People</button>
+        <button type="button" data-tab="diaries" class="on">日記</button>
+        <button type="button" data-tab="chapters">章回</button>
+        <button type="button" data-tab="intents">意圖</button>
+        <button type="button" data-tab="people">人物</button>
       </div>
       <div id="tab-diaries" class="tab-body"></div>
       <div id="tab-chapters" class="tab-body hidden"></div>
@@ -48,18 +48,18 @@
 
   <footer class="god">
     <form id="form-inject">
-      <label>World event
-        <input name="inject" placeholder="A meteor strikes the quay" autocomplete="off" />
+      <label>世界事件
+        <input name="inject" placeholder="隕石擊中碼頭" autocomplete="off" />
       </label>
-      <button type="submit">Inject</button>
+      <button type="submit">注入</button>
     </form>
     <form id="form-steer">
-      <label>Steer intent
-        <input name="steer" placeholder="Mara should ruin Tomas" autocomplete="off" />
+      <label>導引意圖
+        <input name="steer" placeholder="關瑪應當毀了張渡" autocomplete="off" />
       </label>
-      <button type="submit">Steer</button>
+      <button type="submit">導引</button>
     </form>
-    <p class="hint">Canon is sealed. You can change tomorrow, not yesterday. Steer invents motive and pressure; characters still choose.</p>
+    <p class="hint">正史已封。你可以改明日，不能改昨日。導引只造動機與壓力；人物仍自己選擇。</p>
   </footer>
   <script src="/static/app.js"></script>
 </body>

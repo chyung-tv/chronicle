@@ -29,6 +29,19 @@ def test_parse_pair_uses_text_order():
     assert b == "tomas"
 
 
+def test_parse_pair_chinese_names():
+    from playout.steer import _parse_pair
+
+    actors = [
+        {"id": "tomas", "name": "張渡"},
+        {"id": "mara", "name": "關瑪"},
+        {"id": "lena", "name": "林樂安"},
+    ]
+    a, b = _parse_pair("關瑪應當殺了張渡", actors)
+    assert a == "mara"
+    assert b == "tomas"
+
+
 def test_steer_does_not_puppet_a_kill(world):
     llm = LLM()
     assert llm.mode == "mock"
@@ -39,9 +52,7 @@ def test_steer_does_not_puppet_a_kill(world):
     assert kills == []
     assert world.actor("tomas")["alive"]
     assert "kill" not in world.actor("mara")["goal"].lower()
-    assert out["campaign"]["summary"].startswith(
-        "Make it possible that Mara Quinn harms Tomas Reed"
-    )
+    assert out["campaign"]["summary"].startswith("令關瑪有機會傷害張渡")
 
 
 def test_steer_injects_new_events_only(world):

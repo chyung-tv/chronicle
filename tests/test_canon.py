@@ -15,7 +15,7 @@ def world(tmp_path):
 
 
 def test_bootstrap_counts(world):
-    assert world.meta("title") == "Harbor's End"
+    assert world.meta("title") == "港尾"
     assert len(world.living_actors()) == 4
     assert world.cx.execute("SELECT COUNT(*) c FROM locations").fetchone()["c"] == 6
     assert world.all_events()
@@ -44,8 +44,12 @@ def test_diaries_are_sealed(world):
 
 
 def test_epistemic_perceptions_are_per_actor(world):
-    eid = world.append_event("speak", "secret between Tomas and Ellis", actor_id="tomas", target_id="ellis")
+    eid = world.append_event(
+        "speak", "secret between Tomas and Ellis", actor_id="tomas", target_id="ellis"
+    )
     world.perceive(eid, "tomas", "You told Ellis.")
     world.perceive(eid, "ellis", "Tomas told you.")
     mara = world.perceptions_for("mara")
-    assert not any("Tomas told you" in p["text"] or "You told Ellis" in p["text"] for p in mara)
+    assert not any(
+        "Tomas told you" in p["text"] or "You told Ellis" in p["text"] for p in mara
+    )
