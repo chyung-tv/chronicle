@@ -39,7 +39,11 @@ class LLM:
         self.base_url = os.getenv("PLAYOUT_LLM_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
         self.actor_model = os.getenv("PLAYOUT_ACTOR_MODEL", DEFAULT_MODEL)
         self.strong_model = os.getenv("PLAYOUT_STRONG_MODEL", DEFAULT_MODEL)
-        self.mode = "live" if self.api_key else "mock"
+        override = (os.getenv("PLAYOUT_LLM_MODE") or "").strip().lower()
+        if override in ("mock", "live"):
+            self.mode = override
+        else:
+            self.mode = "live" if self.api_key else "mock"
 
     def complete(
         self, system: str, user: str, *, strong: bool = False, temperature: float = 0.7

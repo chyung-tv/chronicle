@@ -190,6 +190,44 @@ class World:
         n = max(len(labels), 1)
         return labels[self.scene % n]
 
+    @property
+    def day_run_multiplier(self) -> int:
+        return int(self.meta("day_run_multiplier", "2") or 2)
+
+    def get_day_plan(self) -> dict[str, Any] | None:
+        raw = self.meta("day_plan")
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+    def set_day_plan(self, plan: dict[str, Any] | None) -> None:
+        self.set_meta("day_plan", json.dumps(plan, ensure_ascii=False) if plan else "")
+        self.cx.commit()
+
+    def get_encounter(self) -> dict[str, Any] | None:
+        raw = self.meta("encounter")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return data if data else None
+
+    @property
+    def beat_label(self) -> str:
+        plan = self.get_day_plan()
+        if not plan:
+            return f"第{self.day}日"
+        total = len(plan.get("slots") or [])
+        k = int(plan.get("cursor") or 0) + 1
+        if total <= 0:
+            return f"第{self.day}日"
+        return f"第{self.day}日，第 {min(k, total)}/{total} 次"
+
     def bootstrap(self, scenario: dict[str, Any]) -> None:
         """Fresh world from scenario dict. Call on a new/empty database."""
         self.set_meta("title", scenario.get("title", "Untitled"))
@@ -205,6 +243,12 @@ class World:
             "time_labels", json.dumps(scenario.get("time_labels", TIME_LABELS))
         )
         self.set_meta("idle_scenes", "0")
+        self.set_meta("idle_days", "0")
+        self.set_meta(
+            "day_run_multiplier", str(scenario.get("day_run_multiplier", 2))
+        )
+        self.set_meta("day_plan", "")
+        self.set_meta("encounter", "")
 
         for loc in scenario["locations"]:
             self.cx.execute(
@@ -601,8 +645,11 @@ class World:
             "worldview": self.meta("worldview"),
             "day": self.day,
             "scene": self.scene,
-            "time_label": self.time_label,
+            "time_label": self.beat_label,
             "scenes_per_day": self.scenes_per_day,
+            "day_plan": self.get_day_plan(),
+            "day_run_multiplier": self.day_run_multiplier,
+            "encounter": self.get_encounter(),
             "max_days": int(self.meta("max_days", "3") or 3),
             "weather": self.meta("weather"),
             "clock": json.loads(self.meta("clock") or "{}"),

@@ -66,6 +66,14 @@ Action = Annotated[
 ]
 
 
+class ActorInner(BaseModel):
+    """Thought/mood after tools have already mutated the world."""
+
+    thought: str = ""
+    goal_update: str | None = None
+    mood: str | None = None
+
+
 class ActorDecision(BaseModel):
     thought: str = ""
     goal_update: str | None = None

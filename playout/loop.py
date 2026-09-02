@@ -1,29 +1,54 @@
-"""Scene-based simulation loop."""
+"""Day-sequence simulation: steer at dawn, shuffled actor bag, random event slots."""
 
 from __future__ import annotations
 
 import json
+import random
 import threading
 from pathlib import Path
 from typing import Any
 
-from playout.actors import actor_turn
+from playout.agents.actor import ActorAgent
+from playout.agents.event import EventAgent
+from playout.agents.steer import SteerAgent
+from playout.agents.writer import WriterAgent
 from playout.canon import World, world_from_scenario
 from playout.llm import LLM
-from playout.steer import submit_intent, tick_intents
-from playout.storyteller import inject_world_event
-from playout.writer import write_day
+from playout.models import StorytellerPlan
+from playout.schedule import (
+    build_day_plan,
+    insert_remaining_event,
+    scheduled_steer_keys,
+)
 
 SCENARIO = Path(__file__).resolve().parent.parent / "scenarios" / "harbors_end.json"
 
+CONFLICT_KINDS = {
+    "attack",
+    "kill",
+    "attempted_kill",
+    "speak",
+    "examine",
+    "steer_motive",
+}
+
 
 class Simulation:
-    def __init__(self, world: World, llm: LLM | None = None):
+    def __init__(
+        self,
+        world: World,
+        llm: LLM | None = None,
+        rng: random.Random | None = None,
+    ):
         self.world = world
         self.llm = llm or LLM()
+        self.rng = rng or random.Random()
         self.world.set_meta("llm_mode", self.llm.mode)
         self.world.set_meta("llm_model", self.llm.actor_model)
-        self._rr = 0
+        self.actor_agent = ActorAgent(self.llm)
+        self.event_agent = EventAgent(self.llm)
+        self.steer_agent = SteerAgent(self.llm)
+        self.writer_agent = WriterAgent(self.llm)
         self._lock = threading.RLock()
 
     @classmethod
@@ -42,46 +67,7 @@ class Simulation:
             world.close()
         return cls.create(str(path), scenario)
 
-    def _next_initiator(self) -> str | None:
-        living = self.world.living_actors()
-        if not living:
-            return None
-        actor = living[self._rr % len(living)]
-        self._rr += 1
-        return actor["id"]
-
-    def _auto_pressure(self) -> dict | None:
-        idle = int(self.world.meta("idle_scenes", "0") or 0)
-        brewing = self.world.cx.execute(
-            "SELECT COUNT(*) c FROM steer_intents WHERE status IN ('brewing','attempted')"
-        ).fetchone()["c"]
-        if brewing:
-            return None
-        kinds = [
-            r["kind"]
-            for r in self.world.cx.execute(
-                "SELECT kind FROM events WHERE day=? AND scene=?",
-                (self.world.day, self.world.scene),
-            )
-        ]
-        conflict = any(
-            k in kinds
-            for k in (
-                "attack",
-                "kill",
-                "attempted_kill",
-                "speak",
-                "examine",
-                "steer_motive",
-            )
-        )
-        if conflict:
-            self.world.set_meta("idle_scenes", "0")
-            return None
-        idle += 1
-        self.world.set_meta("idle_scenes", str(idle))
-        if idle < 3:
-            return None
+    def _pressure_text(self) -> str:
         raw = self.world.meta("clock") or ""
         try:
             parsed = json.loads(raw) if raw else {}
@@ -89,72 +75,180 @@ class Simulation:
         except json.JSONDecodeError:
             note = raw
         note = note or "颱風將至。"
-        return inject_world_event(
-            self.world,
-            self.llm,
-            f"颱風將至，鎮上記得：{note} 雷在崖路上。沒有人能假裝舢板還會自己回來。",
-            kind="world",
-        )
+        return f"颱風將至，鎮上記得：{note} 雷在崖路上。沒有人能假裝舢板還會自己回來。"
+
+    def _should_pressure(self) -> bool:
+        brewing = self.world.cx.execute(
+            "SELECT COUNT(*) c FROM steer_intents WHERE status IN ('brewing','attempted')"
+        ).fetchone()["c"]
+        if brewing:
+            return False
+        prev = self.world.day - 1
+        if prev < 1:
+            return False
+        kinds = [e["kind"] for e in self.world.events_for_day(prev)]
+        if any(k in CONFLICT_KINDS or str(k).startswith("steer_") for k in kinds):
+            self.world.set_meta("idle_days", "0")
+            self.world.cx.commit()
+            return False
+        idle = int(self.world.meta("idle_days", "0") or 0) + 1
+        self.world.set_meta("idle_days", str(idle))
+        self.world.cx.commit()
+        return idle >= 1
+
+    def _harvest_event_slots(self) -> list[dict[str, Any]]:
+        injections: list[dict[str, Any]] = []
+        plan = self.world.get_day_plan()
+        already = scheduled_steer_keys(plan)
+        for item in self.steer_agent.harvest(self.world):
+            key = (item["intent_id"], item["rung_id"])
+            if key in already:
+                continue
+            injections.append(
+                {
+                    "source": "steer",
+                    "intent_id": item["intent_id"],
+                    "rung_id": item["rung_id"],
+                    "event_kind": f"steer_{item['kind']}",
+                    "plan": item["plan"],
+                }
+            )
+        return injections
+
+    def _dawn(self) -> dict[str, Any]:
+        injections = self._harvest_event_slots()
+        if self._should_pressure():
+            injections.append({"source": "pressure", "text": self._pressure_text()})
+        plan = build_day_plan(self.world, injections, self.rng)
+        self.world.set_day_plan(plan)
+        return plan
+
+    def ensure_plan(self) -> dict[str, Any]:
+        plan = self.world.get_day_plan()
+        if (
+            plan
+            and plan.get("day") == self.world.day
+            and int(plan.get("cursor") or 0) < len(plan.get("slots") or [])
+        ):
+            return plan
+        return self._dawn()
+
+    def _run_event_slot(self, slot: dict[str, Any]) -> dict[str, Any]:
+        if slot.get("source") == "steer" and slot.get("plan"):
+            plan = StorytellerPlan.model_validate(slot["plan"])
+            kind = slot.get("event_kind") or f"steer_{slot.get('rung_id', 'motive')}"
+            out = self.event_agent.apply_plan(self.world, plan, kind=kind)
+            if slot.get("intent_id") is not None and slot.get("rung_id"):
+                self.steer_agent.mark_injected(
+                    self.world, int(slot["intent_id"]), str(slot["rung_id"])
+                )
+            return out
+        text = slot.get("text") or ""
+        return self.event_agent.inject(self.world, text, kind="world")
+
+    def _roll_day(self) -> dict[str, Any] | None:
+        day = self.world.day
+        chapter = self.writer_agent.write(self.world, day)
+        self.world.set_meta("day", str(day + 1))
+        self.world.set_meta("scene", "0")
+        self.world.set_day_plan(None)
+        self.world.cx.commit()
+        return chapter
 
     def tick(self) -> dict[str, Any]:
-        """One scene: one initiator, optional reaction, then steer."""
         with self._lock:
             return self._tick_unlocked()
 
     def _tick_unlocked(self) -> dict[str, Any]:
-        initiator = self._next_initiator()
-        if not initiator:
+        if not self.world.living_actors():
             return {"ok": False, "reason": "no living actors"}
-        result = actor_turn(self.world, self.llm, initiator)
-        reaction = None
-        if result.get("expect_reaction"):
-            target = result["expect_reaction"]
-            t = self.world.actor(target)
-            if (
-                t["alive"]
-                and t["location_id"] == self.world.actor(initiator)["location_id"]
-            ):
-                reaction = actor_turn(
-                    self.world,
-                    self.llm,
-                    target,
-                    extra="有人剛對你說話，或剛動手。你須反應。可以開口、還手、等候，或離開。",
-                )
-        pressure = self._auto_pressure()
-        steer = tick_intents(self.world)
-        rolled = self.world.advance_scene()
+        plan = self.ensure_plan()
+        slots = plan.get("slots") or []
+        cur = int(plan.get("cursor") or 0)
+        if cur >= len(slots):
+            chapter = self._roll_day()
+            return {
+                "ok": True,
+                "rolled_day": True,
+                "chapter": chapter,
+                "time": {
+                    "day": self.world.day,
+                    "scene": 0,
+                    "label": self.world.beat_label,
+                },
+            }
+        slot = slots[cur]
+        self.world.set_meta("scene", str(cur))
+        self.world.cx.commit()
+        result: dict[str, Any] | None = None
+        if slot.get("kind") == "actor":
+            result = self.actor_agent.run(self.world, slot["actor_id"])
+            slot["status"] = "done"
+            if result.get("encounter"):
+                slot["encounter"] = True
+        else:
+            result = self._run_event_slot(slot)
+            slot["status"] = "done"
+        plan["cursor"] = cur + 1
+        plan["slots"] = slots
+        self.world.set_day_plan(plan)
         chapter = None
-        if rolled["rolled_day"]:
-            chapter = write_day(self.world, self.llm, rolled["previous_day"])
+        rolled = False
+        if plan["cursor"] >= len(plan["slots"]):
+            chapter = self._roll_day()
+            rolled = True
         return {
             "ok": True,
-            "initiator": initiator,
+            "initiator": slot.get("actor_id"),
+            "slot": slot,
             "result": result,
-            "reaction": reaction,
-            "steer": steer,
-            "pressure": pressure,
-            "time": {
-                "day": self.world.day,
-                "scene": self.world.scene,
-                "label": self.world.time_label,
-            },
+            "rolled_day": rolled,
             "chapter": chapter,
+            "time": {
+                "day": self.world.day if not rolled else self.world.day - 1,
+                "scene": cur,
+                "label": self.world.beat_label,
+            },
         }
 
     def run_day(self) -> list[dict[str, Any]]:
-        logs = []
+        logs: list[dict[str, Any]] = []
         start_day = self.world.day
-        # scenes remaining this day including wrapping
-        for _ in range(self.world.scenes_per_day):
-            logs.append(self.tick())
-            if self.world.day != start_day:
+        for _ in range(64):
+            log = self.tick()
+            logs.append(log)
+            if not log.get("ok"):
+                break
+            if self.world.day != start_day or log.get("rolled_day"):
                 break
         return logs
 
     def inject(self, text: str) -> dict[str, Any]:
         with self._lock:
-            return inject_world_event(self.world, self.llm, text)
+            return self.event_agent.inject(self.world, text)
 
     def steer(self, text: str) -> dict[str, Any]:
         with self._lock:
-            return submit_intent(self.world, self.llm, text)
+            out = self.steer_agent.submit(self.world, text)
+            plan = self.world.get_day_plan()
+            if plan and plan.get("day") == self.world.day:
+                already = scheduled_steer_keys(plan)
+                for item in self.steer_agent.harvest(self.world):
+                    if item["intent_id"] != out.get("id"):
+                        continue
+                    key = (item["intent_id"], item["rung_id"])
+                    if key in already:
+                        continue
+                    insert_remaining_event(
+                        plan,
+                        {
+                            "source": "steer",
+                            "intent_id": item["intent_id"],
+                            "rung_id": item["rung_id"],
+                            "event_kind": f"steer_{item['kind']}",
+                            "plan": item["plan"],
+                        },
+                        self.rng,
+                    )
+                self.world.set_day_plan(plan)
+            return out

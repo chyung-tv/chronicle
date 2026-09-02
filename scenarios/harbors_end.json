@@ -2,6 +2,7 @@
   "title": "港尾",
   "days": 3,
   "scenes_per_day": 6,
+  "day_run_multiplier": 2,
   "time_labels": [
     "黎明",
     "上午",

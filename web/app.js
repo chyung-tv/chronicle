@@ -30,6 +30,7 @@ const STATUS = {
   failed: "失敗",
   pending: "未發",
   injected: "已注入",
+  done: "已畢",
 };
 
 const RUNG = {
@@ -41,6 +42,7 @@ const RUNG = {
 
 let state = null;
 let busy = false;
+let selectedActor = null;
 
 function setBusy(v) {
   busy = v;
@@ -57,6 +59,10 @@ async function api(path, opts) {
 
 async function refresh() {
   state = await api("/api/state");
+  if (selectedActor && !state.actors.some((a) => a.id === selectedActor)) {
+    selectedActor = null;
+  }
+  if (!selectedActor && state.actors.length) selectedActor = state.actors[0].id;
   render();
 }
 
@@ -78,18 +84,58 @@ function statusLabel(status) {
   return STATUS[status] || status;
 }
 
+function beatClock() {
+  const plan = state.day_plan;
+  const slots = plan?.slots || [];
+  const k = Math.min((plan?.cursor || 0) + 1, slots.length || 1);
+  const n = slots.length;
+  const beat = n ? `第 ${k}/${n} 次` : "未排今日";
+  return `第${state.day}日 · ${beat} · 風期：${state.clock?.note || ""}`;
+}
+
 function render() {
   $("#title").textContent = state.title || "演繹";
-  $("#clock").textContent = `第${state.day}日 · ${state.time_label} · 第 ${state.scene + 1}/${state.scenes_per_day} 場 · 風期：${state.clock?.note || ""}`;
+  $("#clock").textContent = beatClock();
   $("#weather").textContent = state.weather || "";
   $("#llm-mode").textContent =
     state.llm_mode === "live" ? state.llm_model || "openrouter" : "模擬語言模型";
+  renderStrip();
   renderMap();
   renderTape();
-  renderDiaries();
   renderChapters();
+  renderCast();
   renderIntents();
-  renderPeople();
+}
+
+function renderStrip() {
+  const ol = $("#run-strip");
+  const plan = state.day_plan;
+  if (!plan || !plan.slots || !plan.slots.length) {
+    ol.innerHTML = `<li>尚未開今日之序。按「演一步」即黎明排程。</li>`;
+    return;
+  }
+  const cur = plan.cursor || 0;
+  const talking = state.encounter && state.encounter.active;
+  ol.innerHTML = plan.slots
+    .map((s, i) => {
+      const cls = [
+        i === cur ? "current" : "",
+        s.status === "done" || i < cur ? "done" : "",
+        s.kind === "event" ? "event" : "",
+        s.encounter || (talking && i === cur) ? "encounter" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      let label;
+      if (s.kind === "event") {
+        label = s.source === "steer" ? `導引·${RUNG[s.rung_id] || s.rung_id || "世變"}` : "世變";
+      } else {
+        label = actorName(s.actor_id);
+      }
+      if ((s.encounter || (talking && i === cur)) && s.kind === "actor") label += " · 對話中";
+      return `<li class="${cls}">${esc(label)}</li>`;
+    })
+    .join("");
 }
 
 function renderMap() {
@@ -111,7 +157,7 @@ function renderMap() {
           const c = colors[i % colors.length];
           const ox = (i - (l.actors.length - 1) / 2) * 14;
           const faded = a.alive ? 1 : 0.35;
-          return `<circle class="actor-dot" cx="${l.x + ox}" cy="${l.y - 22}" r="6" fill="${c}" opacity="${faded}"><title>${a.name}</title></circle>`;
+          return `<circle class="actor-dot" data-actor="${a.id}" cx="${l.x + ox}" cy="${l.y - 22}" r="6" fill="${c}" opacity="${faded}"><title>${a.name}</title></circle>`;
         })
         .join("");
       return `<g>
@@ -122,30 +168,29 @@ function renderMap() {
     })
     .join("");
   svg.innerHTML = edges + nodes;
+  svg.querySelectorAll("[data-actor]").forEach((el) => {
+    el.addEventListener("click", () => {
+      selectedActor = el.getAttribute("data-actor");
+      renderCast();
+    });
+  });
 }
 
 function renderTape() {
   const ol = $("#tape");
-  ol.innerHTML = (state.events || [])
-    .slice()
-    .reverse()
-    .map(
-      (e) => `<li class="kind-${e.kind}">
+  const events = (state.events || []).slice().reverse();
+  ol.innerHTML = events
+    .map((e, i) => {
+      const prev = events[i + 1];
+      const held =
+        prev &&
+        prev.day === e.day &&
+        prev.scene === e.scene &&
+        (e.kind === "speak" || prev.kind === "speak" || e.kind === "attack" || prev.kind === "attack");
+      return `<li class="kind-${e.kind}${held ? " held" : ""}">
         <div class="meta">第${e.day}日 ${kindLabel(e.kind)} #${e.id}</div>
         <div>${esc(e.summary)}</div>
-      </li>`
-    )
-    .join("");
-}
-
-function renderDiaries() {
-  const el = $("#tab-diaries");
-  el.innerHTML = state.actors
-    .map((a) => {
-      const entries = (state.diaries[a.id] || [])
-        .map((d) => `<p class="entry">第${d.day}日：${esc(d.text)}</p>`)
-        .join("");
-      return `<h3>${esc(a.name)}</h3>${entries || "<p class='entry'>（空白）</p>"}`;
+      </li>`;
     })
     .join("");
 }
@@ -165,7 +210,7 @@ function renderChapters() {
 }
 
 function renderIntents() {
-  const el = $("#tab-intents");
+  const el = $("#god-intents");
   if (!state.intents.length) {
     el.innerHTML = "<p class='entry'>尚無導引。寫下一則你希望變得可能的未來。</p>";
     return;
@@ -185,18 +230,38 @@ function renderIntents() {
     .join("");
 }
 
-function renderPeople() {
-  const el = $("#tab-people");
-  el.innerHTML = state.actors
+function renderCast() {
+  const nav = $("#cast-nav");
+  nav.innerHTML = state.actors
     .map(
-      (a) => `<h3>${esc(a.name)} ${a.alive ? "" : "（已歿）"} ${a.injured ? "· 帶傷" : ""}</h3>
-        <p class="entry"><b>所在</b> ${esc(locName(a.location_id))} · <b>心境</b> ${esc(a.mood)}</p>
-        <p class="entry"><b>眼前之願</b> ${esc(a.goal)}</p>
-        <p class="entry"><b>深願</b> ${esc(a.want)}</p>
-        <p class="entry"><b>秘密</b> ${esc(a.secret)}</p>
-        <p class="entry"><b>隨身</b> ${a.inventory.map((o) => o.name).join("、") || "空手"}</p>`
+      (a) =>
+        `<button type="button" data-actor="${a.id}" class="${a.id === selectedActor ? "on" : ""}">${esc(a.name)}</button>`
     )
     .join("");
+  nav.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedActor = btn.dataset.actor;
+      renderCast();
+    });
+  });
+  const a = state.actors.find((x) => x.id === selectedActor) || state.actors[0];
+  if (!a) {
+    $("#cast-sheet").innerHTML = "";
+    return;
+  }
+  const entries = (state.diaries[a.id] || [])
+    .map((d) => `<p class="entry">第${d.day}日：${esc(d.text)}</p>`)
+    .join("");
+  $("#cast-sheet").innerHTML = `
+    <h3>${esc(a.name)} ${a.alive ? "" : "（已歿）"} ${a.injured ? "· 帶傷" : ""}</h3>
+    <p class="entry"><b>所在</b> ${esc(locName(a.location_id))} · <b>心境</b> ${esc(a.mood)}</p>
+    <p class="entry"><b>眼前之願</b> ${esc(a.goal)}</p>
+    <p class="entry"><b>深願</b> ${esc(a.want)}</p>
+    <p class="entry"><b>秘密</b> ${esc(a.secret)}</p>
+    <p class="entry"><b>隨身</b> ${a.inventory.map((o) => o.name).join("、") || "空手"}</p>
+    <h2>日記</h2>
+    ${entries || "<p class='entry'>（空白）</p>"}
+  `;
 }
 
 function esc(s) {
@@ -206,12 +271,12 @@ function esc(s) {
     .replaceAll(">", "&gt;");
 }
 
-document.querySelectorAll(".tabs button").forEach((btn) => {
+document.querySelectorAll(".chronicle .tabs button").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("on"));
+    document.querySelectorAll(".chronicle .tabs button").forEach((b) => b.classList.remove("on"));
     btn.classList.add("on");
-    document.querySelectorAll(".tab-body").forEach((t) => t.classList.add("hidden"));
-    $(`#tab-${btn.dataset.tab}`).classList.remove("hidden");
+    $("#tape").classList.toggle("hidden", btn.dataset.tab !== "tape");
+    $("#tab-chapters").classList.toggle("hidden", btn.dataset.tab !== "chapters");
   });
 });
 
