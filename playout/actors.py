@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from playout.canon import World
 from playout.llm import LLM
-from playout.memory import retrieve
 from playout.models import ActorDecision, WaitAction, action_from_dict
-from playout.referee import apply_action
 from playout.zh import with_prose
 
 ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，須守住人格，不是助手。
@@ -37,77 +35,9 @@ speech、thought、goal_update 一律繁體中文。
 
 
 def private_context(world: World, actor_id: str, extra: str = "") -> str:
-    a = world.actor(actor_id)
-    loc = world.location(a["location_id"])
-    others = [x for x in world.actors_at(a["location_id"]) if x["id"] != actor_id]
-    objs = world.visible_objects(a["location_id"])
-    inv = world.inventory(actor_id)
-    adj = []
-    for aid in world.adjacent(a["location_id"]):
-        dest = world.location(aid)
-        adj.append(f"{aid}（{dest['name']}）")
-    rels = []
-    for o in world.living_actors():
-        if o["id"] == actor_id:
-            continue
-        r = world.relationship(actor_id, o["id"])
-        if r:
-            rels.append(
-                f"{o['name']}（{o['id']}）：信 {r['trust']}，怨 {r['resentment']}。{r['notes']}"
-            )
-    query = extra or a["goal"]
-    memories = retrieve(world, actor_id, query)
-    perceptions = world.perceptions_for(actor_id, limit=12)
-    reflections = world.reflections_for(actor_id, limit=3)
-    people = (
-        "、".join(
-            f"{o['name']}（{o['id']}）" + ("，帶傷" if o["injured"] else "")
-            for o in others
-        )
-        or "無人"
-    )
-    obj_s = "、".join(f"{o['name']} [{o['id']}]" for o in objs) or "眼前無物"
-    inv_s = "、".join(f"{o['name']} [{o['id']}]" for o in inv) or "空手"
-    perc_s = (
-        "\n".join(f"- 第{p['day']}日 {p['text']}" for p in perceptions[:10])
-        or "- （尚無）"
-    )
-    mem_s = "\n".join(f"- {m}" for m in memories) or "- （日記空白）"
-    ref_s = "\n".join(f"- {r['text']}" for r in reflections) or "- （無）"
-    return f"""世界：{world.meta("title")}。{world.meta("worldview")}
-時辰：第{world.day}日，{world.time_label}。天色：{world.meta("weather")}。
-期限：{world.meta("clock")}
+    from playout.agents.views import view_as_prompt
 
-你是：{a["name"]}（{a["id"]}）
-口吻：{a["voice"]}
-本性（不變）：{a["constitution"]}
-深願：{a["want"]}
-你的秘密（他人不知，除非已聞）：{a["secret"]}
-眼前之願（屬你）：{a["goal"]}
-心境：{a["mood"]}
-帶傷：{bool(a["injured"])}
-
-此地：{loc["name"]}（{loc["id"]}）。{loc["description"]}
-完好：{bool(loc["intact"])}
-在場：{people}
-可見之物：{obj_s}
-隨身：{inv_s}
-相鄰：{", ".join(adj) or "無"}
-
-關係：
-{chr(10).join(rels) or "（淡）"}
-
-近時感知（你真正見聞）：
-{perc_s}
-
-憶起的日記：
-{mem_s}
-
-省思：
-{ref_s}
-
-{extra}
-"""
+    return view_as_prompt(world, actor_id, extra)
 
 
 def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
@@ -245,41 +175,6 @@ def decide(world: World, llm: LLM, actor_id: str, extra: str = "") -> ActorDecis
 
 
 def actor_turn(world: World, llm: LLM, actor_id: str, extra: str = "") -> dict:
-    a = world.actor(actor_id)
-    if not a["alive"]:
-        return {"ok": False, "reason": "dead"}
-    decision = decide(world, llm, actor_id, extra)
-    if decision.goal_update:
-        world.set_actor_goal(actor_id, decision.goal_update[:240])
-    if decision.mood:
-        world.set_actor_mood(actor_id, decision.mood[:40])
-    result = apply_action(world, actor_id, decision.action)
-    thought = decision.thought.strip()
-    if thought:
-        event_id = result.get("event_id")
-        world.write_diary(
-            actor_id,
-            f"{thought} 於是：{getattr(decision.action, 'type', 'act')}。",
-            importance=6
-            if decision.action.type in ("attack", "kill", "examine")
-            else 4,
-            event_id=event_id,
-        )
-    diaries = world.diary_for(actor_id, limit=6)
-    if len(diaries) >= 4 and world.scene % 2 == 0:
-        if llm.mode == "mock":
-            world.write_reflection(
-                actor_id, f"我仍想要：{world.actor(actor_id)['goal']}"
-            )
-        else:
-            blob = "\n".join(d["text"] for d in diaries[:6])
-            ref = llm.complete(
-                with_prose("用這人的口吻，兩句話寫出私心。不准添新事實。"),
-                blob,
-                strong=False,
-            )
-            if ref:
-                world.write_reflection(actor_id, ref[:500])
-    result["thought"] = thought
-    result["action"] = decision.action.model_dump()
-    return result
+    from playout.agents.actor import ActorAgent
+
+    return ActorAgent(llm).run(world, actor_id, extra=extra)

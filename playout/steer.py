@@ -338,6 +338,67 @@ def _save_campaign(
     world.cx.commit()
 
 
+def harvest_injections(world: World) -> list[dict[str, Any]]:
+    """Resolve succeeded/failed. Return next pending rung per intent without writing World."""
+    out: list[dict[str, Any]] = []
+    rows = list(
+        world.cx.execute(
+            "SELECT * FROM steer_intents WHERE status IN ('brewing','attempted')"
+        )
+    )
+    for row in rows:
+        campaign = SteerCampaign.model_validate(json.loads(row["campaign"]))
+        if _eval_predicates(world, campaign.success_predicates):
+            _save_campaign(world, row["id"], "succeeded", campaign)
+            continue
+        if _eval_predicates(world, campaign.failure_predicates):
+            _save_campaign(world, row["id"], "failed", campaign)
+            continue
+        if _eval_predicates(
+            world,
+            [
+                p.replace("kill:", "attempt:")
+                for p in campaign.success_predicates
+                if p.startswith("kill:")
+            ],
+        ):
+            if row["status"] != "attempted":
+                _save_campaign(world, row["id"], "attempted", campaign)
+                row = {k: row[k] for k in row.keys()}
+                row["status"] = "attempted"
+        pending = next((r for r in campaign.rungs if r.status == "pending"), None)
+        if pending:
+            out.append(
+                {
+                    "intent_id": row["id"],
+                    "rung_id": pending.id,
+                    "kind": pending.kind,
+                    "plan": pending.injection.model_dump(),
+                    "status": row["status"],
+                }
+            )
+    return out
+
+
+def mark_rung_injected(world: World, intent_id: int, rung_id: str) -> None:
+    row = world.cx.execute(
+        "SELECT * FROM steer_intents WHERE id=?", (intent_id,)
+    ).fetchone()
+    if not row:
+        return
+    campaign = SteerCampaign.model_validate(json.loads(row["campaign"]))
+    for rung in campaign.rungs:
+        if rung.id == rung_id:
+            rung.status = "injected"
+            break
+    status = "attempted" if row["status"] == "attempted" else "brewing"
+    if _eval_predicates(world, campaign.success_predicates):
+        status = "succeeded"
+    elif _eval_predicates(world, campaign.failure_predicates):
+        status = "failed"
+    _save_campaign(world, intent_id, status, campaign)
+
+
 def tick_intents(world: World) -> list[dict[str, Any]]:
     """After a scene: resolve or inject the next rung. One injection per intent per tick."""
     out = []
