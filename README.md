@@ -15,7 +15,7 @@ python -m playout
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 
-Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `PLAYOUT_LLM_API_KEY` (OpenAI-compatible).
+Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731).
 
 ## How it works
 

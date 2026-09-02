@@ -26,7 +26,8 @@ function render() {
   $("#title").textContent = state.title || "Play Out";
   $("#clock").textContent = `Day ${state.day} · ${state.time_label} · scene ${state.scene + 1}/${state.scenes_per_day} · storm clock: ${state.clock?.note || ""}`;
   $("#weather").textContent = state.weather || "";
-  $("#llm-mode").textContent = state.llm_mode === "live" ? "live llm" : "mock llm";
+  $("#llm-mode").textContent =
+    state.llm_mode === "live" ? state.llm_model || "openrouter" : "mock llm";
   renderMap();
   renderTape();
   renderDiaries();

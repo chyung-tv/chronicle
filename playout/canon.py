@@ -608,6 +608,7 @@ class World:
             "clock": json.loads(self.meta("clock") or "{}"),
             "paused": self.meta("paused") == "1",
             "llm_mode": self.meta("llm_mode", "mock"),
+            "llm_model": self.meta("llm_model", ""),
             "locations": locs,
             "edges": edges,
             "actors": actors,

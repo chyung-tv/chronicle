@@ -21,6 +21,7 @@ class Simulation:
         self.world = world
         self.llm = llm or LLM()
         self.world.set_meta("llm_mode", self.llm.mode)
+        self.world.set_meta("llm_model", self.llm.actor_model)
         self._rr = 0
         self._lock = threading.RLock()
 
@@ -62,7 +63,17 @@ class Simulation:
                 (self.world.day, self.world.scene),
             )
         ]
-        conflict = any(k in kinds for k in ("attack", "kill", "attempted_kill", "speak", "examine", "steer_motive"))
+        conflict = any(
+            k in kinds
+            for k in (
+                "attack",
+                "kill",
+                "attempted_kill",
+                "speak",
+                "examine",
+                "steer_motive",
+            )
+        )
         if conflict:
             self.world.set_meta("idle_scenes", "0")
             return None
@@ -92,7 +103,10 @@ class Simulation:
         if result.get("expect_reaction"):
             target = result["expect_reaction"]
             t = self.world.actor(target)
-            if t["alive"] and t["location_id"] == self.world.actor(initiator)["location_id"]:
+            if (
+                t["alive"]
+                and t["location_id"] == self.world.actor(initiator)["location_id"]
+            ):
                 reaction = actor_turn(
                     self.world,
                     self.llm,
