@@ -45,11 +45,46 @@ class Simulation:
         self.rng = rng or random.Random()
         self.world.set_meta("llm_mode", self.llm.mode)
         self.world.set_meta("llm_model", self.llm.actor_model)
+        self.world.cx.commit()
         self.actor_agent = ActorAgent(self.llm)
         self.event_agent = EventAgent(self.llm)
         self.steer_agent = SteerAgent(self.llm)
         self.writer_agent = WriterAgent(self.llm)
         self._lock = threading.RLock()
+        self.reader = world.reader()
+
+    def close(self) -> None:
+        try:
+            self.reader.close()
+        except Exception:
+            pass
+        self.world.close()
+
+    def _end_activity(self, error: str = "") -> None:
+        self.world.set_activity("idle", error=error)
+
+    def _run_locked(
+        self,
+        fn,
+        *,
+        activity: str,
+        actor: str = "",
+        detail: str = "",
+        clear: bool = True,
+    ) -> Any:
+        with self._lock:
+            err = ""
+            try:
+                self.world.set_activity(
+                    activity, actor=actor, detail=detail, error=""
+                )
+                return fn()
+            except Exception as e:
+                err = str(e)[:500]
+                raise
+            finally:
+                if clear:
+                    self._end_activity(err)
 
     @classmethod
     def create(cls, db_path: str, scenario_path: str | None = None) -> "Simulation":
@@ -147,6 +182,7 @@ class Simulation:
         return self.event_agent.inject(self.world, text, kind="world")
 
     def _roll_day(self) -> dict[str, Any] | None:
+        self.world.set_activity("writing", actor="writer", detail="章回正在寫成")
         day = self.world.day
         chapter = self.writer_agent.write(self.world, day)
         self.world.set_meta("day", str(day + 1))
@@ -155,9 +191,13 @@ class Simulation:
         self.world.cx.commit()
         return chapter
 
-    def tick(self) -> dict[str, Any]:
-        with self._lock:
-            return self._tick_unlocked()
+    def tick(self, *, clear_activity: bool = True) -> dict[str, Any]:
+        return self._run_locked(
+            self._tick_unlocked,
+            activity="thinking",
+            detail="即將開演",
+            clear=clear_activity,
+        )
 
     def _tick_unlocked(self) -> dict[str, Any]:
         if not self.world.living_actors():
@@ -182,11 +222,19 @@ class Simulation:
         self.world.cx.commit()
         result: dict[str, Any] | None = None
         if slot.get("kind") == "actor":
-            result = self.actor_agent.run(self.world, slot["actor_id"])
+            aid = slot["actor_id"]
+            name = self.world.actor(aid)["name"]
+            self.world.set_activity(
+                "thinking", actor=aid, detail=f"{name}正在抉擇"
+            )
+            result = self.actor_agent.run(self.world, aid)
             slot["status"] = "done"
             if result.get("encounter"):
                 slot["encounter"] = True
         else:
+            self.world.set_activity(
+                "injecting", actor="storyteller", detail="世變將至"
+            )
             result = self._run_event_slot(slot)
             slot["status"] = "done"
         plan["cursor"] = cur + 1
@@ -212,23 +260,32 @@ class Simulation:
         }
 
     def run_day(self) -> list[dict[str, Any]]:
-        logs: list[dict[str, Any]] = []
-        start_day = self.world.day
-        for _ in range(64):
-            log = self.tick()
-            logs.append(log)
-            if not log.get("ok"):
-                break
-            if self.world.day != start_day or log.get("rolled_day"):
-                break
-        return logs
+        def go() -> list[dict[str, Any]]:
+            logs: list[dict[str, Any]] = []
+            start_day = self.world.day
+            for _ in range(64):
+                log = self.tick(clear_activity=False)
+                logs.append(log)
+                if not log.get("ok"):
+                    break
+                if self.world.day != start_day or log.get("rolled_day"):
+                    break
+            return logs
+
+        return self._run_locked(
+            go, activity="thinking", detail="演完今日", clear=True
+        )
 
     def inject(self, text: str) -> dict[str, Any]:
-        with self._lock:
-            return self.event_agent.inject(self.world, text)
+        return self._run_locked(
+            lambda: self.event_agent.inject(self.world, text),
+            activity="injecting",
+            actor="storyteller",
+            detail="神諭注入中",
+        )
 
     def steer(self, text: str) -> dict[str, Any]:
-        with self._lock:
+        def go() -> dict[str, Any]:
             out = self.steer_agent.submit(self.world, text)
             plan = self.world.get_day_plan()
             if plan and plan.get("day") == self.world.day:
@@ -252,3 +309,7 @@ class Simulation:
                     )
                 self.world.set_day_plan(plan)
             return out
+
+        return self._run_locked(
+            go, activity="steering", actor="steer", detail="導引醞釀中"
+        )

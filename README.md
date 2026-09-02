@@ -10,6 +10,8 @@ If you already have a `playout.db` from an English seed, **Reset world** in the 
 
 ## Run
 
+Two processes: FastAPI owns SQLite and inference; Next.js is the UI.
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -17,9 +19,19 @@ pip install -e ".[dev]"
 python -m playout
 ```
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+In another terminal:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The Next app rewrites `/api/*` to FastAPI on [http://127.0.0.1:8765](http://127.0.0.1:8765) (`PLAYOUT_API_ORIGIN` to override).
 
 Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731). Agents are [pydantic-ai](https://ai.pydantic.dev/) `Agent`s (`OpenRouterModel`); set `PLAYOUT_LLM_MODE=mock` to force heuristics even when a key is present.
+
+The UI subscribes to `GET /api/stream` (SSE from a read-only SQLite connection). `POST /api/tick` only starts a slot; the tape updates as referee tools commit.
 
 ## How it works
 
@@ -47,4 +59,5 @@ Steer never writes a kill, never overwrites a goal, never edits the past. Soft: 
 
 ```bash
 pytest -q
+cd web && npm run build
 ```

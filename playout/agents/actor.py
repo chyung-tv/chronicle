@@ -30,6 +30,18 @@ from playout.zh import with_prose
 MUTATE_BUDGET = 4
 MAX_ENCOUNTER_ROUNDS = 3
 
+ACTION_ACTIVITY = {
+    "move": "正在前往",
+    "speak_to": "正在開口",
+    "take": "正在取物",
+    "drop": "正在放下",
+    "examine": "正在察看",
+    "wait": "正在等候",
+    "write_note": "正在寫紙",
+    "attack": "正在襲擊",
+    "kill": "欲下手",
+}
+
 ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，須守住人格，不是助手。
 你只知道自己感知過、寫進日記的事。別人的秘密，除非你已得知，否則你不知道。
 目標由你自己從所見所聞長出。誰也不能替你派一個目標。
@@ -81,6 +93,12 @@ def format_action_return(world: World, actor_id: str, result: dict[str, Any]) ->
 def dispatch_action(deps: ActorDeps, action: Action) -> dict[str, Any]:
     if deps.mutates_used >= deps.mutate_budget:
         return {"ok": False, "reason": "budget", "detail": "這一時辰你已動得夠多。"}
+    name = deps.world.actor(deps.actor_id)["name"]
+    kind = getattr(action, "type", "act")
+    verb = ACTION_ACTIVITY.get(kind, "正在行動")
+    deps.world.set_activity(
+        "thinking", actor=deps.actor_id, detail=f"{name}{verb}"
+    )
     deps.mutates_used += 1
     result = apply_action(deps.world, deps.actor_id, action)
     result["action"] = action.model_dump()

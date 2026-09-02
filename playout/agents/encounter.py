@@ -48,6 +48,11 @@ def hold_encounter(
         ),
     )
     world.cx.commit()
+    world.set_activity(
+        "thinking",
+        actor=counterpart_id,
+        detail=f"{other['name']}正在對答",
+    )
 
     from playout.agents.actor import ActorAgent, perceptions_since
 
