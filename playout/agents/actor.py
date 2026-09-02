@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic_ai import Agent, RunContext
+
 from playout.agents.model import llm_mode, openrouter_model, actor_model_name
 from playout.agents.views import view_as_prompt
 from playout.canon import World
@@ -202,8 +204,6 @@ class ActorAgent:
         return result
 
     def _run_live(self, deps: ActorDeps) -> dict[str, Any]:
-        from pydantic_ai import Agent, RunContext
-
         agent: Agent[ActorDeps, ActorInner] = Agent(
             openrouter_model(actor_model_name()),
             deps_type=ActorDeps,

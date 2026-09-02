@@ -8,7 +8,6 @@ export function useWorldStream() {
   const [error, setError] = useState<string | null>(null);
   const [latch, setLatch] = useState(false);
   const genAtLatch = useRef(0);
-  const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     let poll: ReturnType<typeof setInterval> | undefined;
@@ -19,22 +18,18 @@ export function useWorldStream() {
       if (data.activity_error) setError(data.activity_error);
     };
 
-    const startPoll = () => {
-      if (poll) return;
-      poll = setInterval(async () => {
-        try {
-          const r = await fetch("/api/state");
-          if (!r.ok) return;
-          apply(await r.json());
-        } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
-        }
-      }, 1000);
+    const pull = async () => {
+      try {
+        const r = await fetch("/api/state");
+        if (!r.ok) return;
+        apply(await r.json());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     };
 
     const connect = () => {
       es = new EventSource("/api/stream");
-      esRef.current = es;
       es.onmessage = (ev) => {
         try {
           apply(JSON.parse(ev.data) as WorldSnapshot);
@@ -44,12 +39,13 @@ export function useWorldStream() {
       };
       es.onerror = () => {
         es?.close();
-        esRef.current = null;
-        startPoll();
+        es = null;
       };
     };
 
     connect();
+    poll = setInterval(pull, 400);
+    void pull();
     return () => {
       es?.close();
       if (poll) clearInterval(poll);
