@@ -63,6 +63,17 @@ button:disabled { opacity: 0.5; cursor: wait; }
   color: var(--foam);
   letter-spacing: 0.08em;
 }
+.pill.busy {
+  border-color: var(--gold);
+  color: var(--gold);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.banner {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #e8b3a6;
+  font-size: 0.85rem;
+}
 
 .run-strip {
   grid-column: 1 / -1;
@@ -109,7 +120,7 @@ button:disabled { opacity: 0.5; cursor: wait; }
 }
 .weather { color: var(--ink-dim); font-size: 0.9rem; }
 
-#map { width: 100%; height: auto; background: #14282e; border: 1px solid #2d4c54; }
+.map { width: 100%; height: auto; background: #14282e; border: 1px solid #2d4c54; }
 .node-label { fill: var(--paper); font-size: 11px; font-family: inherit; }
 .node-circle { fill: #2a4e58; stroke: var(--foam); }
 .node-ruined { fill: #3a2a28; stroke: var(--rust); }
@@ -127,6 +138,7 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .kind-kill, .kind-world_kill { color: #e8b3a6; }
 .kind-steer_motive, .kind-steer_means, .kind-steer_opportunity, .kind-steer_escalation { color: var(--gold); }
 .tape li.held { border-left: 2px solid var(--foam); padding-left: 0.5rem; }
+.tape li.pending { color: var(--gold); font-style: italic; }
 
 .tabs { display: flex; gap: 0.25rem; }
 .tabs button { background: #14282e; color: var(--paper); font-size: 0.78rem; letter-spacing: 0.08em; }
@@ -177,6 +189,11 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .status.attempted { color: var(--gold); }
 .hint { grid-column: 1 / -1; margin: 0; color: #6b5e4a; font-size: 0.85rem; }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 @media (max-width: 980px) {
   .workspace { grid-template-columns: 1fr; max-height: none; }
   .panel { max-height: 420px; }
@@ -187,4 +204,5 @@ button:disabled { opacity: 0.5; cursor: wait; }
 
 @media (prefers-reduced-motion: reduce) {
   button { transition: none; }
+  .pill.busy { animation: none; }
 }

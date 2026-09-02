@@ -130,10 +130,19 @@ class CanonError(Exception):
 
 
 class World:
-    def __init__(self, db_path: str | Path):
-        self.db_path = str(db_path)
+    def __init__(self, db_path: str | Path, *, readonly: bool = False):
+        self.db_path = str(Path(db_path).resolve())
+        self.readonly = readonly
         self._lock = threading.RLock()
-        self.cx = sqlite3.connect(self.db_path, check_same_thread=False)
+        if readonly:
+            uri = Path(self.db_path).as_uri() + "?mode=ro"
+            self.cx = sqlite3.connect(
+                uri, uri=True, timeout=5.0, check_same_thread=False
+            )
+            self.cx.row_factory = sqlite3.Row
+            self.cx.execute("PRAGMA query_only=ON")
+            return
+        self.cx = sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0)
         self.cx.row_factory = sqlite3.Row
         self.cx.executescript(SCHEMA)
         self.cx.execute(
@@ -161,6 +170,49 @@ class World:
 
     def close(self) -> None:
         self.cx.close()
+
+    def reader(self) -> "World":
+        """Second WAL connection. Safe to snapshot while the writer is in OpenRouter."""
+        return World(self.db_path, readonly=True)
+
+    def set_activity(
+        self,
+        status: str,
+        *,
+        actor: str = "",
+        detail: str = "",
+        error: str | None = None,
+    ) -> None:
+        if self.readonly:
+            raise CanonError("reader cannot write activity")
+        gen = int(self.meta("activity_gen", "0") or 0) + 1
+        self.set_meta("activity", status)
+        self.set_meta("activity_actor", actor)
+        self.set_meta("activity_detail", detail)
+        self.set_meta("activity_gen", str(gen))
+        if error is not None:
+            self.set_meta("activity_error", error)
+        self.cx.commit()
+
+    def stream_cursor(self) -> tuple[Any, ...]:
+        def _max(table: str) -> int:
+            row = self.cx.execute(
+                f"SELECT COALESCE(MAX(id), 0) AS m FROM {table}"
+            ).fetchone()
+            return int(row["m"])
+
+        plan = self.get_day_plan() or {}
+        return (
+            _max("events"),
+            _max("diaries"),
+            _max("chapters"),
+            int(self.meta("activity_gen", "0") or 0),
+            self.meta("encounter") or "",
+            int(plan.get("cursor") or 0),
+            self.meta("activity") or "idle",
+            self.meta("activity_detail") or "",
+            self.meta("activity_error") or "",
+        )
 
     def meta(self, key: str, default: str | None = None) -> str | None:
         row = self.cx.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
@@ -217,6 +269,12 @@ class World:
             return None
         return data if data else None
 
+    def set_encounter(self, data: dict[str, Any] | None) -> None:
+        self.set_meta(
+            "encounter", json.dumps(data, ensure_ascii=False) if data else ""
+        )
+        self.cx.commit()
+
     @property
     def beat_label(self) -> str:
         plan = self.get_day_plan()
@@ -249,6 +307,11 @@ class World:
         )
         self.set_meta("day_plan", "")
         self.set_meta("encounter", "")
+        self.set_meta("activity", "idle")
+        self.set_meta("activity_actor", "")
+        self.set_meta("activity_detail", "")
+        self.set_meta("activity_gen", "0")
+        self.set_meta("activity_error", "")
 
         for loc in scenario["locations"]:
             self.cx.execute(
@@ -656,6 +719,11 @@ class World:
             "paused": self.meta("paused") == "1",
             "llm_mode": self.meta("llm_mode", "mock"),
             "llm_model": self.meta("llm_model", ""),
+            "activity": self.meta("activity", "idle") or "idle",
+            "activity_actor": self.meta("activity_actor", "") or "",
+            "activity_detail": self.meta("activity_detail", "") or "",
+            "activity_gen": int(self.meta("activity_gen", "0") or 0),
+            "activity_error": self.meta("activity_error", "") or "",
             "locations": locs,
             "edges": edges,
             "actors": actors,

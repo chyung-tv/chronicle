@@ -12,6 +12,11 @@ class MoveAction(BaseModel):
     to: str
 
 
+class InteractAction(BaseModel):
+    type: Literal["interact"] = "interact"
+    text: str
+
+
 class SpeakAction(BaseModel):
     type: Literal["speak_to"] = "speak_to"
     target: str
@@ -54,6 +59,7 @@ class KillAction(BaseModel):
 
 Action = Annotated[
     MoveAction
+    | InteractAction
     | SpeakAction
     | TakeAction
     | DropAction
@@ -104,6 +110,44 @@ class Patch(BaseModel):
     hidden: bool = False
 
 
+class PerceptionOut(BaseModel):
+    actor_id: str
+    text: str
+
+
+class SpeechOut(BaseModel):
+    speaker_id: str
+    hearer_id: str | None = None
+    text: str
+
+
+class ObjectMutation(BaseModel):
+    op: Literal["take", "drop", "reveal", "write_note"]
+    object_id: str | None = None
+    actor_id: str | None = None
+    text: str = ""
+
+
+class RelationBump(BaseModel):
+    from_id: str
+    to_id: str
+    trust: int = 0
+    resentment: int = 0
+    note: str = ""
+
+
+class RefereeVerdict(BaseModel):
+    """Structured judgment of one or two interact attempts. Applied deterministically."""
+
+    summary: str
+    kind: str = "interact"
+    patches: list[Patch] = Field(default_factory=list)
+    perceptions: list[PerceptionOut] = Field(default_factory=list)
+    speeches: list[SpeechOut] = Field(default_factory=list)
+    objects: list[ObjectMutation] = Field(default_factory=list)
+    relations: list[RelationBump] = Field(default_factory=list)
+
+
 class StorytellerPlan(BaseModel):
     summary: str
     patches: list[Patch] = Field(default_factory=list)
@@ -134,6 +178,7 @@ def action_from_dict(data: dict[str, Any]) -> Action:
     t = data.get("type")
     mapping = {
         "move": MoveAction,
+        "interact": InteractAction,
         "speak_to": SpeakAction,
         "take": TakeAction,
         "drop": DropAction,

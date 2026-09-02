@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from playout.canon import World
 from playout.llm import LLM
-from playout.models import ActorDecision, WaitAction, action_from_dict
+from playout.models import ActorDecision, InteractAction, WaitAction, action_from_dict
 from playout.zh import with_prose
 
 ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，須守住人格，不是助手。
@@ -16,21 +16,15 @@ ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，須守住人格，
 
 Action must be one of:
 {"type":"move","to":"<location_id>"}
-{"type":"speak_to","target":"<actor_id>","speech":"..."}
-{"type":"take","object_id":"..."}
-{"type":"drop","object_id":"..."}
-{"type":"examine","target":"<object_id or location_id>"}
+{"type":"interact","text":"你此刻試圖做的事，自然語言，繁體中文"}
 {"type":"wait"}
-{"type":"write_note","text":"..."}
-{"type":"attack","target":"<actor_id>"}
-{"type":"kill","target":"<actor_id>"}
 
 規則：
-- speak_to、attack、kill 僅當對方在此。
+- interact 可對在場之人說話、取物、察看、動手、寫紙。點出對方姓名或 id。
 - move 只能去相鄰的 location_id。
 - 不要敘述世界。只選一個行動。
 - 若你自己決定，可以動武。勿輕易殺人。
-speech、thought、goal_update 一律繁體中文。
+thought、goal_update、interact 的 text 一律繁體中文。
 """)
 
 
@@ -54,6 +48,7 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
         or "attacks you" in last_l
     ):
         attacker = others[0]["id"] if others else None
+        attacker_name = others[0]["name"] if others else ""
         for p in percs:
             for o in others:
                 name = o["name"]
@@ -65,10 +60,11 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
                     or "kill" in blob.lower()
                 ):
                     attacker = o["id"]
+                    attacker_name = name
         if attacker:
             return ActorDecision(
                 thought="不能不還手。",
-                action=action_from_dict({"type": "attack", "target": attacker}),
+                action=InteractAction(text=f"襲擊{attacker_name}"),
             )
 
     if others and ("對你道" in last or "says to you" in last_l):
@@ -84,11 +80,7 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
         }.get(actor_id, "沒有時間了。")
         return ActorDecision(
             thought="有人對我說話。",
-            action=action_from_dict({
-                "type": "speak_to",
-                "target": t["id"],
-                "speech": speech,
-            }),
+            action=InteractAction(text=f"對{t['name']}道：{speech}"),
         )
 
     hidden_here = world.cx.execute(
@@ -101,7 +93,7 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
     ):
         return ActorDecision(
             thought="此處不妥。",
-            action=action_from_dict({"type": "examine", "target": loc}),
+            action=InteractAction(text=f"察看此地（{loc}）"),
         )
 
     visible = world.visible_objects(loc)
@@ -115,11 +107,11 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
             if "letter" in obj["id"] or "skiff" in obj["id"]:
                 return ActorDecision(
                     thought="得看清楚。",
-                    action=action_from_dict({"type": "examine", "target": obj["id"]}),
+                    action=InteractAction(text=f"察看{obj['name']}（{obj['id']}）"),
                 )
             return ActorDecision(
                 thought="或許用得著。",
-                action=action_from_dict({"type": "take", "object_id": obj["id"]}),
+                action=InteractAction(text=f"取走{obj['name']}（{obj['id']}）"),
             )
 
     prefer = {
@@ -145,11 +137,7 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
         }.get(actor_id, "天色怪。")
         return ActorDecision(
             thought="開口。",
-            action=action_from_dict({
-                "type": "speak_to",
-                "target": t["id"],
-                "speech": speech,
-            }),
+            action=InteractAction(text=f"對{t['name']}道：{speech}"),
         )
     if adj:
         return ActorDecision(
