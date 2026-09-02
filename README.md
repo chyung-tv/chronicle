@@ -19,15 +19,29 @@ python -m playout
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 
-Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731).
+Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731). Agents are [pydantic-ai](https://ai.pydantic.dev/) `Agent`s (`OpenRouterModel`); set `PLAYOUT_LLM_MODE=mock` to force heuristics even when a key is present.
 
 ## How it works
 
-- **Canon** is SQLite. The event tape, diaries, and chapters are append-only.
-- **Actors** only see their own perceptions. They choose structured actions; a referee applies them.
-- **Storyteller** turns "隕石擊中碼頭" into state patches (ruin the quay, injure who is there, perceptions).
-- **Steer** turns "關瑪應當毀了張渡" into a campaign of motive / means / opportunity / escalation. It never writes a kill, never overwrites a goal, never edits the past. Soft: the outcome can fail.
-- **Writer** retells each day from the tape. No rewrite box.
+Canon is SQLite. The event tape, diaries, and chapters are append-only.
+
+```
+SteerAgent (dawn, off-budget) → queues injections
+Day plan: shuffled actor bag (each living actor ≥1 run)
+           length = randint(n, n × multiplier)  default multiplier 2
+           event slots inserted at random gaps
+ActorAgent reads a private view, mutates World only via referee tools
+Encounter hold: if A speaks to / strikes co-located B, A's tool waits;
+                B runs once (no nested hold); A sees the outcome as the tool result
+EventAgent is the only patch writer (inject, steer rungs, idle pressure)
+WriterAgent retells the tape at day end
+```
+
+Day start = the run sequence is planned. Day end = last slot done, then the chapter. There is no clock of 黎明/上午; a beat is one slot in that sequence.
+
+Co-located replies do not consume B's later scheduled run. A's scheduled beat has a mutate budget of 4 (including up to 3 encounter rounds).
+
+Steer never writes a kill, never overwrites a goal, never edits the past. Soft: the outcome can fail.
 
 ## Tests
 
