@@ -2,6 +2,7 @@ export const KIND: Record<string, string> = {
   wait: "等候",
   move: "前往",
   speak: "對白",
+  interact: "行事",
   take: "取物",
   drop: "放下",
   examine: "察看",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 import threading
@@ -29,6 +30,7 @@ CONFLICT_KINDS = {
     "attempted_kill",
     "speak",
     "examine",
+    "interact",
     "steer_motive",
 }
 
@@ -227,7 +229,7 @@ class Simulation:
             self.world.set_activity(
                 "thinking", actor=aid, detail=f"{name}正在抉擇"
             )
-            result = self.actor_agent.run(self.world, aid)
+            result = asyncio.run(self.actor_agent.run_async(self.world, aid))
             slot["status"] = "done"
             if result.get("encounter"):
                 slot["encounter"] = True

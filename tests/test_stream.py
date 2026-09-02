@@ -23,15 +23,15 @@ def test_reader_sees_thinking_event_then_idle(tmp_path, monkeypatch):
 
     barrier = threading.Event()
     released = threading.Event()
-    orig = actor_mod.dispatch_action
+    orig = actor_mod.dispatch_action_async
 
-    def slow(deps, action):
-        result = orig(deps, action)
+    async def slow(deps, action):
+        result = await orig(deps, action)
         barrier.set()
         released.wait(timeout=8)
         return result
 
-    monkeypatch.setattr(actor_mod, "dispatch_action", slow)
+    monkeypatch.setattr(actor_mod, "dispatch_action_async", slow)
     th = threading.Thread(target=sim.tick, daemon=True)
     th.start()
     assert barrier.wait(timeout=8), "dispatch never ran"
@@ -103,4 +103,32 @@ def test_tick_command_accepts_without_waiting(tmp_path, monkeypatch):
             t.join(timeout=15)
         snap = client.get("/api/state").json()
         assert snap["activity"] == "idle"
+    appmod.close_sim()
+
+
+def test_reset_accepted_idle_gen_bumped(tmp_path, monkeypatch):
+    monkeypatch.setenv("PLAYOUT_DB", str(tmp_path / "rst.db"))
+    appmod.close_sim()
+    with TestClient(appmod.app) as client:
+        before = client.get("/api/state").json()
+        assert before["activity"] == "idle"
+        r = client.post("/api/reset")
+        assert r.status_code == 200
+        assert r.json() == {"accepted": True}
+        after = client.get("/api/state").json()
+        assert after["activity"] == "idle"
+        assert after["activity_gen"] > before["activity_gen"]
+        assert after["events"]
+    appmod.close_sim()
+
+
+def test_reset_409_when_busy(tmp_path, monkeypatch):
+    monkeypatch.setenv("PLAYOUT_DB", str(tmp_path / "rstbusy.db"))
+    appmod.close_sim()
+    with TestClient(appmod.app) as client:
+        sim = appmod.get_sim()
+        sim.world.set_activity("thinking", detail="held")
+        r = client.post("/api/reset")
+        assert r.status_code == 409
+        sim.world.set_activity("idle")
     appmod.close_sim()

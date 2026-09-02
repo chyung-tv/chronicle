@@ -188,14 +188,19 @@ def reset():
     with s._lock:
         if _busy(s.world):
             raise HTTPException(409, "busy")
-        s.world.set_activity("thinking", detail="重置世界")
-    close_sim()
-    path = db_path()
-    if path.exists():
-        path.unlink()
-    for suffix in ("-wal", "-shm"):
-        p = Path(str(path) + suffix)
-        if p.exists():
-            p.unlink()
-    sim = Simulation.create(str(path), str(SCENARIO))
+        try:
+            s.reader.close()
+        except Exception:
+            pass
+        s.world.close()
+        sim = None
+        path = db_path()
+        if path.exists():
+            path.unlink()
+        for suffix in ("-wal", "-shm"):
+            p = Path(str(path) + suffix)
+            if p.exists():
+                p.unlink()
+        sim = Simulation.create(str(path), str(SCENARIO))
+        sim.world.set_activity("idle")
     return {"accepted": True}

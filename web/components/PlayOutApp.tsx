@@ -79,7 +79,7 @@ export function PlayOutApp() {
             disabled={busy}
             onClick={() => {
               if (!confirm("這會抹去事件帶，重新開始「港尾」。")) return;
-              runCommand(postReset);
+              runCommand(postReset, { blocking: true });
             }}
           >
             重置世界

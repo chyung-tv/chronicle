@@ -269,6 +269,12 @@ class World:
             return None
         return data if data else None
 
+    def set_encounter(self, data: dict[str, Any] | None) -> None:
+        self.set_meta(
+            "encounter", json.dumps(data, ensure_ascii=False) if data else ""
+        )
+        self.cx.commit()
+
     @property
     def beat_label(self) -> str:
         plan = self.get_day_plan()
