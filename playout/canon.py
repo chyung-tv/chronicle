@@ -810,7 +810,7 @@ class World:
         }
 
 
-def world_from_scenario(db_path: str | Path, scenario_path: str | Path) -> World:
+def unlink_db(db_path: str | Path) -> None:
     path = Path(db_path)
     if path.exists():
         path.unlink()
@@ -818,7 +818,16 @@ def world_from_scenario(db_path: str | Path, scenario_path: str | Path) -> World
         p = Path(str(path) + suffix)
         if p.exists():
             p.unlink()
+
+
+def world_from_setup(db_path: str | Path, setup: dict[str, Any]) -> World:
+    unlink_db(db_path)
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     world = World(db_path)
-    scenario = json.loads(Path(scenario_path).read_text())
-    world.bootstrap(scenario)
+    world.bootstrap(setup)
     return world
+
+
+def world_from_scenario(db_path: str | Path, scenario_path: str | Path) -> World:
+    scenario = json.loads(Path(scenario_path).read_text())
+    return world_from_setup(db_path, scenario)

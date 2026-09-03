@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Cast } from "@/components/Cast";
 import { Chapters, EventTape } from "@/components/EventTape";
 import { GodRail } from "@/components/GodRail";
 import { RunStrip } from "@/components/RunStrip";
 import { TownMap } from "@/components/TownMap";
 import { useWorldStream } from "@/hooks/useWorldStream";
-import { postDay, postInject, postReset, postSteer, postTick } from "@/lib/api";
+import {
+  postDay,
+  postInject,
+  postReset,
+  postSteer,
+  postTick,
+} from "@/lib/api";
 
 function beatClock(state: {
   day: number;
@@ -22,8 +30,9 @@ function beatClock(state: {
   return `第${state.day}日 · ${beat} · 風期：${state.clock?.note || ""}`;
 }
 
-export function PlayOutApp() {
-  const { state, error, busy, runCommand } = useWorldStream();
+export function PlayOutApp({ storyId }: { storyId: string }) {
+  const { state, error, busy, runCommand } = useWorldStream(storyId);
+  const router = useRouter();
   const [tab, setTab] = useState<"tape" | "chapters">("tape");
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -51,10 +60,19 @@ export function PlayOutApp() {
         ? state.llm_model || "openrouter"
         : "模擬語言模型";
 
+  const owner = !!state.is_owner;
+  const god = !!state.can_god;
+
   return (
     <>
       <header className="masthead">
         <div className="mast-title">
+          <p className="chrome-links">
+            <Link href="/">故事</Link>
+            {owner ? (
+              <Link href={`/s/${storyId}/design`}>世界設定</Link>
+            ) : null}
+          </p>
           <h1>{state.title || "演繹"}</h1>
           <p className="sub">{beatClock(state)}</p>
         </div>
@@ -62,28 +80,42 @@ export function PlayOutApp() {
           <button
             type="button"
             disabled={busy}
-            onClick={() => runCommand(postTick)}
+            onClick={() => runCommand(() => postTick(storyId))}
           >
             演一步
           </button>
           <button
             type="button"
             disabled={busy}
-            onClick={() => runCommand(postDay)}
+            onClick={() => runCommand(() => postDay(storyId))}
           >
             演完今日
           </button>
-          <button
-            type="button"
-            className="ghost"
-            disabled={busy}
-            onClick={() => {
-              if (!confirm("這會抹去事件帶，重新開始「港尾」。")) return;
-              runCommand(postReset, { blocking: true });
-            }}
-          >
-            重置世界
-          </button>
+          {owner ? (
+            <button
+              type="button"
+              className="ghost"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  !confirm(
+                    "這會銷毀已發生的事件帶，故事回到未開演，方可再改世界設定。此控制日後將移除。"
+                  )
+                ) {
+                  return;
+                }
+                runCommand(
+                  async () => {
+                    await postReset(storyId);
+                    router.push(`/s/${storyId}/design`);
+                  },
+                  { blocking: true }
+                );
+              }}
+            >
+              重置世界
+            </button>
+          ) : null}
           <span className={`pill${busy ? " busy" : ""}`}>{activityText}</span>
         </div>
         {error ? <p className="banner">{error}</p> : null}
@@ -127,12 +159,14 @@ export function PlayOutApp() {
         </aside>
       </main>
 
-      <GodRail
-        state={state}
-        busy={busy}
-        onInject={(text) => runCommand(() => postInject(text))}
-        onSteer={(text) => runCommand(() => postSteer(text))}
-      />
+      {god ? (
+        <GodRail
+          state={state}
+          busy={busy}
+          onInject={(text) => runCommand(() => postInject(storyId, text))}
+          onSteer={(text) => runCommand(() => postSteer(storyId, text))}
+        />
+      ) : null}
     </>
   );
 }

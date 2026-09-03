@@ -13,7 +13,7 @@ from playout.agents.actor import ActorAgent
 from playout.agents.event import EventAgent
 from playout.agents.steer import SteerAgent
 from playout.agents.writer import WriterAgent
-from playout.canon import World, world_from_scenario
+from playout.canon import World, world_from_scenario, world_from_setup
 from playout.llm import LLM
 from playout.models import StorytellerPlan
 from playout.schedule import (
@@ -92,6 +92,18 @@ class Simulation:
     def create(cls, db_path: str, scenario_path: str | None = None) -> "Simulation":
         world = world_from_scenario(db_path, scenario_path or SCENARIO)
         return cls(world)
+
+    @classmethod
+    def create_from_setup(cls, db_path: str, setup: dict[str, Any]) -> "Simulation":
+        world = world_from_setup(db_path, setup)
+        return cls(world)
+
+    @classmethod
+    def open_existing(cls, db_path: str) -> "Simulation":
+        path = Path(db_path)
+        if not path.exists():
+            raise FileNotFoundError(db_path)
+        return cls(World(path))
 
     @classmethod
     def open(cls, db_path: str, scenario_path: str | None = None) -> "Simulation":

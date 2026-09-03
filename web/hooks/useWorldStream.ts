@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchState } from "@/lib/api";
+import { persistUser, userHeaders } from "@/lib/auth";
 import type { WorldSnapshot } from "@/lib/types";
 
-export function useWorldStream() {
+export function useWorldStream(storyId: string | null) {
   const [state, setState] = useState<WorldSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notLive, setNotLive] = useState(false);
   const [latch, setLatch] = useState(false);
   const genAtLatch = useRef(0);
 
@@ -15,27 +18,44 @@ export function useWorldStream() {
   }, []);
 
   const pull = useCallback(async () => {
+    if (!storyId) return;
     try {
-      const r = await fetch("/api/state");
-      if (!r.ok) return;
-      apply(await r.json());
+      persistUser({
+        id: userHeaders()["X-User-Id"],
+        name: userHeaders()["X-User-Name"],
+      });
+      const data = await fetchState(storyId);
+      setNotLive(false);
+      apply(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "尚未開演") {
+        setNotLive(true);
+        return;
+      }
+      setError(msg);
     }
-  }, [apply]);
+  }, [apply, storyId]);
 
   useEffect(() => {
+    if (!storyId) return;
     let poll: ReturnType<typeof setInterval> | undefined;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
     let es: EventSource | null = null;
     let stopped = false;
 
+    persistUser({
+      id: userHeaders()["X-User-Id"],
+      name: userHeaders()["X-User-Name"],
+    });
+
     const connect = () => {
       if (stopped) return;
-      es = new EventSource("/api/stream");
+      es = new EventSource(`/api/stories/${storyId}/stream`);
       es.onmessage = (ev) => {
         try {
           apply(JSON.parse(ev.data) as WorldSnapshot);
+          setNotLive(false);
         } catch {
           /* ignore malformed frames */
         }
@@ -57,7 +77,7 @@ export function useWorldStream() {
       if (poll) clearInterval(poll);
       if (reconnect) clearTimeout(reconnect);
     };
-  }, [apply, pull]);
+  }, [apply, pull, storyId]);
 
   const busy =
     latch ||
@@ -90,5 +110,5 @@ export function useWorldStream() {
     [state?.activity_gen, pull]
   );
 
-  return { state, error, setError, busy, runCommand };
+  return { state, error, setError, busy, runCommand, notLive };
 }
