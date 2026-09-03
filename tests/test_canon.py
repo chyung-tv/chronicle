@@ -19,6 +19,12 @@ def test_bootstrap_counts(world):
     assert len(world.living_actors()) == 4
     assert world.cx.execute("SELECT COUNT(*) c FROM locations").fetchone()["c"] == 6
     assert world.all_events()
+    lena = world.actor("lena")
+    assert lena["age"] == 28
+    assert lena["occupation"] == "麵包舖主"
+    assert world.relationship("lena", "tomas")["nature"] == "couple"
+    rings = world.object("quay_rings")
+    assert rings and rings["location_id"] == "quay"
 
 
 def test_events_are_sealed(world):

@@ -36,6 +36,7 @@ class DropAction(BaseModel):
 class ExamineAction(BaseModel):
     type: Literal["examine"] = "examine"
     target: str  # object id or location id
+    intent: str = ""
 
 
 class WaitAction(BaseModel):
@@ -238,6 +239,47 @@ class MoveResolution(BaseModel):
     self_perception: str = ""
     leave_perception: str = ""
     arrive_perception: str = ""
+    event_id: int | None = None
+
+
+class ExamineIntent(BaseModel):
+    actor_id: str
+    aim: str
+    intent: str = ""
+
+
+class ObjectAppend(BaseModel):
+    object_id: str
+    text: str
+
+
+class FoundObject(BaseModel):
+    object_id: str
+    name: str
+    description: str = ""
+
+
+class ExamineDiscovery(BaseModel):
+    """God-side result of looking. Applied by the examine resolver only."""
+
+    perception: str = ""
+    summary: str = ""
+    object_appends: list[ObjectAppend] = Field(default_factory=list)
+    location_details: list[str] = Field(default_factory=list)
+    add_objects: list[FoundObject] = Field(default_factory=list)
+    reveal_ids: list[str] = Field(default_factory=list)
+
+
+class ExamineResolution(BaseModel):
+    ok: bool
+    actor_id: str
+    aim: str
+    here_id: str = ""
+    kind: Literal["object", "place", "look_toward", "failed"] = "failed"
+    reason: str | None = None
+    summary: str = ""
+    self_perception: str = ""
+    witness_perception: str = ""
     event_id: int | None = None
 
 

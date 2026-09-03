@@ -9,6 +9,16 @@ from playout.memory import retrieve
 from playout.models import LocationNode, WorldAtmosphere
 
 
+NATURE_LABELS = {
+    "couple": "情人",
+    "kin": "親族",
+    "debt": "債",
+    "friend": "友人",
+    "rival": "對頭",
+    "acquaintance": "相識",
+}
+
+
 class ObjectView(BaseModel):
     id: str
     name: str
@@ -28,6 +38,7 @@ class RelationView(BaseModel):
     trust: int = 0
     resentment: int = 0
     notes: str = ""
+    nature: str = "acquaintance"
 
 
 class ActorView(BaseModel):
@@ -43,6 +54,10 @@ class ActorView(BaseModel):
     mood: str = ""
     injured: bool = False
     alive: bool = True
+    age: int = 0
+    sex: str = ""
+    race: str = ""
+    occupation: str = ""
     location: LocationNode
     inventory: list[ObjectView] = Field(default_factory=list)
     relations: list[RelationView] = Field(default_factory=list)
@@ -81,6 +96,7 @@ def actor_view(world: World, actor_id: str, extra: str = "") -> ActorView:
                     trust=r["trust"],
                     resentment=r["resentment"],
                     notes=r["notes"],
+                    nature=r["nature"] if "nature" in r.keys() else "acquaintance",
                 )
             )
     query = extra or a["goal"]
@@ -95,6 +111,10 @@ def actor_view(world: World, actor_id: str, extra: str = "") -> ActorView:
         mood=a["mood"],
         injured=bool(a["injured"]),
         alive=bool(a["alive"]),
+        age=int(a["age"] or 0),
+        sex=a["sex"] or "",
+        race=a["race"] or "",
+        occupation=a["occupation"] or "",
         location=node,
         inventory=[
             ObjectView(id=o["id"], name=o["name"], description=o["description"])
@@ -126,7 +146,7 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
     ref_s = "\n".join(f"- {r}" for r in a.reflections) or "- （無）"
     rel_s = (
         "\n".join(
-            f"{r.name}（{r.id}）：信 {r.trust}，怨 {r.resentment}。{r.notes}"
+            f"{r.name}（{r.id}）：{NATURE_LABELS.get(r.nature, '相識')}。信 {r.trust}，怨 {r.resentment}。{r.notes}"
             for r in a.relations
         )
         or "（淡）"
@@ -141,6 +161,7 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
 期限：{w.clock}
 
 你是：{a.name}（{a.id}）
+歲：{a.age or "不詳"}。性：{a.sex or "不詳"}。族：{a.race or "不詳"}。業：{a.occupation or "不詳"}
 口吻：{a.voice}
 本性（不變）：{a.constitution}
 深願：{a.want}

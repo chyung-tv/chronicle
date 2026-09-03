@@ -100,6 +100,10 @@
       "id": "lena",
       "name": "林樂安",
       "location": "bakery",
+      "age": 28,
+      "sex": "女",
+      "race": "漢",
+      "occupation": "麵包舖主",
       "voice": "輕而準，像一邊數錢一邊說話。她極少提高聲音；一旦提高，便已來不及。",
       "want": "守住父親的麵包舖。還高亦禮的債，卻不賣店。若債能了，想與張渡過安靜些的日子。",
       "secret": "打烊後與張渡私會，已三個月。未曾告訴關瑪——關瑪待她幾乎如姪女。",
@@ -111,6 +115,10 @@
       "id": "tomas",
       "name": "張渡",
       "location": "quay",
+      "age": 31,
+      "sex": "男",
+      "race": "漢",
+      "occupation": "漁人",
       "voice": "漁人的沙啞裡帶著好說話。笑話在先，真話晚到，若肯到的話。",
       "want": "有一條自己的船，在高亦禮佔走林樂安的早晨之前，帶她離開這港汊。",
       "secret": "昨夜偷了關瑪的舢板，藏在崖路下的澳裡。是高亦禮教的：賣掉分錢。",
@@ -122,6 +130,10 @@
       "id": "mara",
       "name": "關瑪",
       "location": "boathouse",
+      "age": 52,
+      "sex": "女",
+      "race": "漢",
+      "occupation": "船寮管事",
       "voice": "乾、短，碼頭管事的口氣。她把事物叫準。",
       "want": "討回亡夫的舢板，並當眾叫出賊名。",
       "secret": "她已疑張渡。宅中有一封未示人的信：前夜她見林樂安與張渡從碼頭離開，寫下來，免得哀傷把字磨平。",
@@ -133,6 +145,10 @@
       "id": "ellis",
       "name": "高亦禮",
       "location": "inn",
+      "age": 45,
+      "sex": "男",
+      "race": "漢",
+      "occupation": "放債人",
       "voice": "像合上的帳本那樣客氣。他用嘴笑。收債從不趕。",
       "want": "風來時若林樂安還不出，便收下面包舖。他以紙上的字計算體面。",
       "secret": "是他教張渡去偷關瑪的舢板。他要留下錢，仍去催林樂安的債。若有人問，他會否認。",
@@ -142,6 +158,13 @@
     }
   ],
   "objects": [
+    {
+      "id": "quay_rings",
+      "name": "空鐵環",
+      "description": "本該繫舢板的鐵環，空著。鏽與潮水。",
+      "location_id": "quay",
+      "hidden": false
+    },
     {
       "id": "cleaver",
       "name": "麵包舖菜刀",
@@ -177,6 +200,7 @@
       "b": "tomas",
       "trust": 7,
       "resentment": 1,
+      "nature": "couple",
       "notes": "私情；她以為他會幫她還債"
     },
     {
@@ -184,6 +208,7 @@
       "b": "lena",
       "trust": 6,
       "resentment": 0,
+      "nature": "couple",
       "notes": "想帶她走；尚未告知舢板一事"
     },
     {
@@ -191,6 +216,7 @@
       "b": "ellis",
       "trust": -3,
       "resentment": 6,
+      "nature": "debt",
       "notes": "他握著債"
     },
     {
@@ -198,6 +224,7 @@
       "b": "lena",
       "trust": 1,
       "resentment": 0,
+      "nature": "debt",
       "notes": "有用的抵押"
     },
     {
@@ -205,6 +232,7 @@
       "b": "mara",
       "trust": 5,
       "resentment": 0,
+      "nature": "kin",
       "notes": "幾乎是親人；林樂安在騙她"
     },
     {
@@ -212,6 +240,7 @@
       "b": "lena",
       "trust": 2,
       "resentment": 3,
+      "nature": "kin",
       "notes": "疼惜已被信裡的字帶酸"
     },
     {
@@ -219,6 +248,7 @@
       "b": "tomas",
       "trust": -2,
       "resentment": 5,
+      "nature": "rival",
       "notes": "疑他偷船"
     },
     {
@@ -226,6 +256,7 @@
       "b": "mara",
       "trust": 0,
       "resentment": 2,
+      "nature": "rival",
       "notes": "怕她的眼睛"
     },
     {
@@ -233,6 +264,7 @@
       "b": "ellis",
       "trust": 1,
       "resentment": 2,
+      "nature": "acquaintance",
       "notes": "壞交易，尚未破"
     },
     {
@@ -240,6 +272,7 @@
       "b": "tomas",
       "trust": -1,
       "resentment": 0,
+      "nature": "acquaintance",
       "notes": "用完可棄的手"
     },
     {
@@ -247,6 +280,7 @@
       "b": "ellis",
       "trust": -1,
       "resentment": 2,
+      "nature": "acquaintance",
       "notes": "不喜碼頭上的放債人"
     },
     {
@@ -254,6 +288,7 @@
       "b": "mara",
       "trust": 0,
       "resentment": 1,
+      "nature": "acquaintance",
       "notes": "她不便宜"
     }
   ],

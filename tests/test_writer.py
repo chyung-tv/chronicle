@@ -48,6 +48,7 @@ def test_writer_pack_includes_speech_and_locations(world):
     assert "quay" in loc_ids
     quay = next(n for n in pack["locations"] if n["id"] == "quay")
     assert quay["description"]
+    assert "details" in quay
 
 
 def test_writer_chapter_cites_tape(world):

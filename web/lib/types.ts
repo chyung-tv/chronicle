@@ -34,6 +34,10 @@ export type Actor = {
   mood: string;
   alive: boolean;
   injured: boolean;
+  age: number;
+  sex: string;
+  race: string;
+  occupation: string;
   inventory: { id: string; name: string }[];
 };
 

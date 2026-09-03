@@ -14,9 +14,10 @@ WRITER_SYSTEM = with_prose("""你是小說家，重述一份模擬日誌。可�
 不可捏造日誌裡沒有的事件、死亡、親吻、發現或對白。
 每一樁事實都須能被所引的 event id 支撐。
 當日無人死，就不要寫死；當日有死，照實寫，不必迴避。
-有 payload.speeches 時，寫成「甲對乙道：「…」」。用詞可稍加打磨，意思與引號內的話不可改。
+有 payload.speeches 時，寫成「甲對乙道：「…」」。用詞可稍加打磨，意思與引號內的話不可改。對白裡的停頓、口氣照實用。
+沒有利害的寒暄可以略過不寫；有利害、有秘密、有威脅的對白必須保留。
 沒有記錄下來的台詞，才可改寫成招呼、點頭之類。
-可就「地點」裡已有的環境描寫與當天天色加以渲染（潮、風、氣味、泥）。不可添該地描述與事件帶都沒有的物件、足跡或房間。
+可就「地點」裡已有的環境描寫、累積細節與當天天色加以渲染（潮、風、氣味、泥）。不可添該地描述與事件帶都沒有的物件、足跡或房間。
 
 只回傳 JSON：
 {"pov":"<actor_id>","tags":["背叛","颱風"],"cited_event_ids":[1,2,3],"text":"章回正文，繁體中文書面，約四百至八百字"}
@@ -79,7 +80,12 @@ def writer_pack(world: World, day: int) -> dict[str, Any]:
         except Exception:
             continue
         nodes.append(
-            {"id": node.id, "name": node.name, "description": node.description}
+            {
+                "id": node.id,
+                "name": node.name,
+                "description": node.description,
+                "details": world.location_detail_texts(loc_id),
+            }
         )
     atmo = world.atmosphere()
     return {
