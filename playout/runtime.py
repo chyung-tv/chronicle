@@ -70,4 +70,14 @@ class StoryRuntime:
             return self.store.unseal(rec.id)
 
     def snapshot(self, rec: StoryRecord) -> dict[str, Any]:
-        return self.get(rec).reader.snapshot()
+        from playout.canon import World
+
+        world = World(
+            self.store.canon_ref(rec.id),
+            readonly=True,
+            database_url=self.store.database_url,
+        )
+        try:
+            return world.snapshot()
+        finally:
+            world.close()

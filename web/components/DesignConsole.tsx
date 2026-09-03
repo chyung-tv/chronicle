@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DesignMap } from "@/components/DesignMap";
+import { Loading } from "@/components/Loading";
+import { AgentProgress } from "@/components/AgentProgress";
 import { api, fetchMe, fetchStory, postWizard } from "@/lib/api";
 import type {
   ActorSketch,
@@ -23,11 +25,22 @@ function clone<T>(s: T): T {
   return JSON.parse(JSON.stringify(s)) as T;
 }
 
+async function waitForWizard(id: string, onStory?: (rec: StoryDetail) => void) {
+  for (;;) {
+    const rec = await fetchStory(id);
+    onStory?.(rec);
+    const st = rec.agent?.status;
+    if (st !== "queued" && st !== "running") {
+      return rec;
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
 export function DesignConsole({ storyRef }: { storyRef: string }) {
   const router = useRouter();
   const [story, setStory] = useState<StoryDetail | null>(null);
   const [sketch, setSketch] = useState<StorySketch | null>(null);
-  const [slug, setSlug] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,7 +59,6 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
         }
         setStory(rec);
         setSketch(clone(rec.sketch));
-        setSlug(rec.slug);
         setHasDraft(
           !!(
             rec.setup.opening_situation?.trim() ||
@@ -63,6 +75,35 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
     };
   }, [storyRef]);
 
+  useEffect(() => {
+    if (!story) return;
+    const st = story.agent?.status;
+    if (st !== "queued" && st !== "running") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rec = await waitForWizard(story.id, setStory);
+        if (cancelled) return;
+        setStory(rec);
+        setSketch(clone(rec.sketch));
+        if (rec.agent?.status === "done") {
+          router.push(`/s/${story.id}/design/review`);
+        } else if (rec.agent?.status === "error") {
+          setError(rec.agent.error || "巫師失敗");
+          setBusy(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e));
+          setBusy(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, story?.agent?.status, story?.id]);
+
   const readonly = !!story && !story.editable;
 
   const setSk = (patch: Partial<StorySketch>) => {
@@ -77,13 +118,11 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
     const rec = await api<StoryDetail>(`/api/stories/${story.id}`, {
       method: "PATCH",
       body: JSON.stringify({
-        slug,
         sketch: { ...sketch, title: sketch.title },
       }),
     });
     setStory(rec);
     setSketch(clone(rec.sketch));
-    setSlug(rec.slug);
     return rec;
   };
 
@@ -111,6 +150,11 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
     try {
       await persist();
       await postWizard(story.id);
+      const rec = await waitForWizard(story.id, setStory);
+      setSketch(clone(rec.sketch));
+      if (rec.agent?.status === "error") {
+        throw new Error(rec.agent.error || "巫師失敗");
+      }
       router.push(`/s/${story.id}/design/review`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -189,8 +233,17 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
     setSk({ relationships: [...sketch.relationships, rel] });
   };
 
+  const agent = story.agent;
+  const wizardRunning =
+    agent?.status === "queued" || agent?.status === "running";
+
   return (
     <>
+      {wizardRunning && agent ? (
+        <Loading>
+          <AgentProgress state={agent} />
+        </Loading>
+      ) : null}
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
@@ -245,11 +298,6 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
               onChange={(e) => setSk({ title: e.target.value })}
             />
             <span className="field-hint">給這則故事的名字。</span>
-          </label>
-          <label>
-            短名
-            <input value={slug} onChange={(e) => setSlug(e.target.value)} />
-            <span className="field-hint">English id，用於網址。</span>
           </label>
           <label>
             當日拍數上限
@@ -330,19 +378,6 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
           {sketch.actors.map((act, i) => (
             <div className="subcard" key={act.id}>
               <div className="row">
-                <label>
-                  id
-                  <input
-                    value={act.id}
-                    onChange={(e) =>
-                      setSk({
-                        actors: sketch.actors.map((a, j) =>
-                          j === i ? { ...a, id: e.target.value } : a
-                        ),
-                      })
-                    }
-                  />
-                </label>
                 <label>
                   名
                   <input
@@ -425,19 +460,6 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
           {sketch.objects.map((obj, i) => (
             <div className="subcard" key={obj.id}>
               <div className="row">
-                <label>
-                  id
-                  <input
-                    value={obj.id}
-                    onChange={(e) =>
-                      setSk({
-                        objects: sketch.objects.map((o, j) =>
-                          j === i ? { ...o, id: e.target.value } : o
-                        ),
-                      })
-                    }
-                  />
-                </label>
                 <label>
                   名
                   <input

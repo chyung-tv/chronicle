@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import threading
-from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -17,7 +15,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from playout.auth import DEV_USER_ID, User, can_god, get_user, is_owner
-from playout.loop import Simulation
 from playout.models import StorySetup, StorySketch, empty_setup, empty_sketch
 from playout.privacy import redact_setup, redact_snapshot, redact_sketch
 from playout.runtime import StoryRuntime
@@ -38,7 +35,6 @@ ROOT = Path(__file__).resolve().parent.parent
 
 store: StoryStore | None = None
 runtime: StoryRuntime | None = None
-_workers: list[threading.Thread] = []
 
 
 def catalog_path() -> Path:
@@ -69,9 +65,9 @@ def get_runtime() -> StoryRuntime:
 
 def close_runtime() -> None:
     global runtime, store
-    for t in list(_workers):
-        t.join(timeout=60)
-    _workers.clear()
+    from playout.worker import stop_inline
+
+    stop_inline()
     if runtime is not None:
         runtime.close()
         runtime = None
@@ -89,6 +85,12 @@ async def lifespan(_app: FastAPI):
     st = get_store()
     st.seed_harbors_end(DEV_USER_ID)
     get_runtime()
+    from playout import jobs as jobmod
+    from playout.worker import start_inline
+
+    jobmod.ensure_jobs(st)
+    if jobmod.worker_mode() == "inline":
+        start_inline(st)
     yield
     close_runtime()
 
@@ -130,10 +132,6 @@ def _require_owner(user: User, rec: StoryRecord) -> None:
         raise HTTPException(403, "not owner")
 
 
-def _busy(sim: Simulation) -> bool:
-    return (sim.world.meta("activity", "idle") or "idle") != "idle"
-
-
 def _http_store(exc: StoreError) -> None:
     if isinstance(exc, NotFound):
         raise HTTPException(404, "story not found") from exc
@@ -167,6 +165,8 @@ def _card(rec: StoryRecord, user: User) -> dict[str, Any]:
 
 
 def _detail(rec: StoryRecord, user: User) -> dict[str, Any]:
+    from playout import jobs as jobmod
+
     owner = is_owner(user, rec.owner_id)
     setup = rec.setup()
     sketch = rec.sketch()
@@ -179,46 +179,32 @@ def _detail(rec: StoryRecord, user: User) -> dict[str, Any]:
         "can_god": can_god(user, rec.owner_id, rec.status),
         "setup": setup,
         "sketch": sketch,
+        "agent": jobmod.agent_state(get_store(), rec.id),
     }
 
 
-def _accept(
-    sim: Simulation,
-    fn: Callable[[], Any],
+def _enqueue(
+    rec: StoryRecord,
+    kind: str,
     *,
-    activity: str,
+    detail: str,
     actor: str = "",
-    detail: str = "",
+    payload: dict[str, Any] | None = None,
 ) -> dict[str, bool]:
-    with sim._lock:
-        if _busy(sim):
-            raise HTTPException(409, "busy")
-        sim.world.set_activity(activity, actor=actor, detail=detail, error="")
+    from playout import jobs as jobmod
 
-    def work() -> None:
-        try:
-            fn()
-        except Exception as e:
-            try:
-                sim.world.set_activity("idle", error=str(e)[:500])
-            except Exception:
-                pass
-
-    t = threading.Thread(target=work, daemon=True, name="playout-cmd")
-    _workers.append(t)
-    t.start()
-    return {"accepted": True}
-
-
-def _live_sim(rec: StoryRecord) -> Simulation:
-    if rec.status != "live":
-        raise HTTPException(409, "not live")
     try:
-        return get_runtime().get(rec)
-    except FileNotFoundError:
-        raise HTTPException(409, "not live") from None
-    except AlreadyDraft:
-        raise HTTPException(409, "not live") from None
+        jobmod.enqueue(
+            get_store(),
+            rec.id,
+            kind,
+            payload=payload,
+            actor=actor,
+            detail=detail,
+        )
+    except jobmod.Busy:
+        raise HTTPException(409, "busy") from None
+    return {"accepted": True}
 
 
 def _snapshot_for(rec: StoryRecord, user: User) -> dict[str, Any]:
@@ -291,19 +277,13 @@ def wizard_story(ref: str, user: User = Depends(current_user)):
     _require_owner(user, rec)
     if rec.status != "draft":
         raise HTTPException(409, "sealed")
-    from playout.llm import LLM
-    from playout.wizard import enrich
+    from playout.models import StorySketch
 
     try:
-        sketch = StorySketch.model_validate(rec.sketch() or {})
+        StorySketch.model_validate(rec.sketch() or {})
     except Exception as e:
         raise HTTPException(400, f"invalid sketch: {e}") from e
-    setup = enrich(sketch, LLM())
-    try:
-        updated = get_store().update_setup(rec.id, setup=setup, sketch=sketch)
-    except StoreError as e:
-        _http_store(e)
-    return _detail(updated, user)
+    return _enqueue(rec, "wizard", detail="正在請示巫師…", actor="wizard")
 
 
 @app.post("/api/stories/{ref}/duplicate")
@@ -351,13 +331,26 @@ def start_story(ref: str, user: User = Depends(current_user)):
 @app.post("/api/stories/{ref}/reset")
 def reset_story(ref: str, user: User = Depends(current_user)):
     """TEMPORARY unseal: drop canon, return to draft. Remove when stories are unique."""
+    from playout import jobs as jobmod
+    from playout.canon import World
+
     rec = _story(ref)
     _require_owner(user, rec)
+    if jobmod.story_busy(get_store(), rec.id):
+        raise HTTPException(409, "busy")
+    if rec.status == "live":
+        world = World(
+            get_store().canon_ref(rec.id),
+            readonly=True,
+            database_url=get_store().database_url,
+        )
+        try:
+            if (world.meta("activity", "idle") or "idle") != "idle":
+                raise HTTPException(409, "busy")
+        finally:
+            world.close()
     rt = get_runtime()
     try:
-        sim = rt._sims.get(rec.id)
-        if sim is not None and _busy(sim):
-            raise HTTPException(409, "busy")
         updated = rt.unseal(rec)
     except AlreadyDraft:
         raise HTTPException(409, "already draft") from None
@@ -371,34 +364,51 @@ def reset_story(ref: str, user: User = Depends(current_user)):
 @app.get("/api/stories/{ref}/state")
 def story_state(ref: str, user: User = Depends(current_user)):
     rec = _story(ref)
-    _live_sim(rec)
+    if rec.status != "live":
+        raise HTTPException(409, "not live")
+    if not get_store().canon_exists(rec.id):
+        raise HTTPException(409, "not live")
     return _snapshot_for(rec, user)
 
 
 @app.get("/api/stories/{ref}/stream")
 async def story_stream(ref: str, request: Request):
+    from playout.canon import World
+
     user = get_user(request)
     rec = _story(ref)
-    sim = _live_sim(rec)
+    if rec.status != "live":
+        raise HTTPException(409, "not live")
+    st = get_store()
+    if not st.canon_exists(rec.id):
+        raise HTTPException(409, "not live")
+    world = World(
+        st.canon_ref(rec.id),
+        readonly=True,
+        database_url=st.database_url,
+    )
 
     async def gen():
         last: tuple[Any, ...] | None = None
-        while True:
-            try:
-                cursor = sim.reader.stream_cursor()
-                if cursor != last:
-                    last = cursor
-                    fresh = get_store().get(rec.id)
-                    if fresh is None or fresh.status != "live":
-                        yield ": closed\n\n"
-                        return
-                    snap = _snapshot_for(fresh, user)
-                    yield f"data: {json.dumps(snap, ensure_ascii=False)}\n\n"
-                else:
+        try:
+            while True:
+                try:
+                    cursor = world.stream_cursor()
+                    if cursor != last:
+                        last = cursor
+                        fresh = get_store().get(rec.id)
+                        if fresh is None or fresh.status != "live":
+                            yield ": closed\n\n"
+                            return
+                        snap = _snapshot_for(fresh, user)
+                        yield f"data: {json.dumps(snap, ensure_ascii=False)}\n\n"
+                    else:
+                        yield ": keepalive\n\n"
+                except Exception:
                     yield ": keepalive\n\n"
-            except Exception:
-                yield ": keepalive\n\n"
-            await asyncio.sleep(0.2)
+                await asyncio.sleep(0.2)
+        finally:
+            world.close()
 
     return StreamingResponse(
         gen(),
@@ -414,15 +424,17 @@ async def story_stream(ref: str, request: Request):
 @app.post("/api/stories/{ref}/tick")
 def tick(ref: str, user: User = Depends(current_user)):
     rec = _story(ref)
-    sim = _live_sim(rec)
-    return _accept(sim, sim.tick, activity="thinking", detail="即將開演")
+    if rec.status != "live":
+        raise HTTPException(409, "not live")
+    return _enqueue(rec, "tick", detail="即將開演")
 
 
 @app.post("/api/stories/{ref}/day")
 def run_day(ref: str, user: User = Depends(current_user)):
     rec = _story(ref)
-    sim = _live_sim(rec)
-    return _accept(sim, sim.run_day, activity="thinking", detail="演完今日")
+    if rec.status != "live":
+        raise HTTPException(409, "not live")
+    return _enqueue(rec, "day", detail="演完今日")
 
 
 @app.post("/api/stories/{ref}/inject")
@@ -433,13 +445,12 @@ def inject(ref: str, body: TextIn, user: User = Depends(current_user)):
         raise HTTPException(409, "not live")
     if not body.text.strip():
         raise HTTPException(400, "empty")
-    sim = _live_sim(rec)
-    return _accept(
-        sim,
-        lambda: sim.inject(body.text.strip()),
-        activity="injecting",
-        actor="storyteller",
+    return _enqueue(
+        rec,
+        "inject",
         detail="神諭注入中",
+        actor="storyteller",
+        payload={"text": body.text.strip()},
     )
 
 
@@ -451,11 +462,10 @@ def steer(ref: str, body: TextIn, user: User = Depends(current_user)):
         raise HTTPException(409, "not live")
     if not body.text.strip():
         raise HTTPException(400, "empty")
-    sim = _live_sim(rec)
-    return _accept(
-        sim,
-        lambda: sim.steer(body.text.strip()),
-        activity="steering",
-        actor="steer",
+    return _enqueue(
+        rec,
+        "steer",
         detail="導引醞釀中",
+        actor="steer",
+        payload={"text": body.text.strip()},
     )

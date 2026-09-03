@@ -36,6 +36,7 @@ export async function api<T = Record<string, unknown>>(
   }
   if (r.status === 403) throw new Error("沒有權限");
   if (r.status === 404) throw new Error("找不到這則故事");
+  if (r.status >= 500) throw new Error("服務暫時失敗，請再試。");
   if (!r.ok) throw new Error(await parseError(r));
   if (r.status === 204) return {} as T;
   return r.json();
@@ -85,7 +86,9 @@ export function postStart(storyId: string) {
 }
 
 export function postWizard(storyId: string) {
-  return api<StoryDetail>(`/api/stories/${storyId}/wizard`, { method: "POST" });
+  return api<{ accepted?: boolean }>(`/api/stories/${storyId}/wizard`, {
+    method: "POST",
+  });
 }
 
 export function fetchStory(ref: string) {

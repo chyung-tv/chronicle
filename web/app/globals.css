@@ -488,6 +488,52 @@ a.btn:focus-visible { outline: 2px solid var(--foam); outline-offset: 2px; }
   white-space: pre-wrap;
 }
 
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 36, 41, 0.82);
+  padding: 1.5rem;
+}
+.loading-card {
+  width: min(28rem, 100%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  padding: 1.35rem 1.4rem 1.5rem;
+  color: var(--ink);
+}
+.loading-kicker {
+  margin: 0 0 0.85rem;
+  font-family: var(--chrome);
+  letter-spacing: 0.12em;
+  color: var(--gold);
+  font-size: 0.82rem;
+}
+.agent-progress { display: grid; gap: 0.55rem; }
+.agent-kind {
+  margin: 0;
+  font-family: var(--chrome);
+  font-size: 1.05rem;
+}
+.agent-detail {
+  margin: 0;
+  color: var(--foam);
+  font-size: 0.95rem;
+}
+.agent-bar {
+  height: 0.45rem;
+  background: #14282e;
+  border: 1px solid var(--border);
+}
+.agent-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 240ms ease;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }

@@ -278,7 +278,6 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
             <table className="design-table">
               <thead>
                 <tr>
-                  <th>id</th>
                   <th>name</th>
                   <th>x</th>
                   <th>y</th>
@@ -288,9 +287,6 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
               <tbody>
                 {setup.locations.map((loc, i) => (
                   <tr key={loc.id}>
-                    <td>
-                      <Cell value={loc.id} readonly onChange={() => undefined} />
-                    </td>
                     <td>
                       <Cell
                         value={loc.name}
@@ -345,7 +341,6 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
             <table className="design-table">
               <thead>
                 <tr>
-                  <th>id</th>
                   <th>name</th>
                   <th>location</th>
                   <th>mood</th>
@@ -359,9 +354,6 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
               <tbody>
                 {setup.actors.map((act, i) => (
                   <tr key={act.id}>
-                    <td>
-                      <Cell value={act.id} readonly onChange={() => undefined} />
-                    </td>
                     <td>
                       <Cell
                         value={act.name}
@@ -474,10 +466,9 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
             <table className="design-table">
               <thead>
                 <tr>
-                  <th>id</th>
                   <th>name</th>
-                  <th>location_id</th>
-                  <th>holder_id</th>
+                  <th>location</th>
+                  <th>holder</th>
                   <th>hidden</th>
                   <th>description</th>
                 </tr>
@@ -485,16 +476,13 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
               <tbody>
                 {setup.objects.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="cell-read">
+                    <td colSpan={5} className="cell-read">
                       （無）
                     </td>
                   </tr>
                 ) : (
                   setup.objects.map((obj, i) => (
                     <tr key={obj.id}>
-                      <td>
-                        <Cell value={obj.id} readonly onChange={() => undefined} />
-                      </td>
                       <td>
                         <Cell
                           value={obj.name}
@@ -510,14 +498,14 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
                       </td>
                       <td>
                         <Cell
-                          value={obj.location_id || ""}
+                          value={obj.location_id ? locName(obj.location_id) : "無"}
                           readonly
                           onChange={() => undefined}
                         />
                       </td>
                       <td>
                         <Cell
-                          value={obj.holder_id || ""}
+                          value={obj.holder_id ? actorName(obj.holder_id) : "無"}
                           readonly
                           onChange={() => undefined}
                         />

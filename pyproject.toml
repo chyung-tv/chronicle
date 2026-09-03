@@ -23,6 +23,7 @@ dev = ["pytest>=8.3.0"]
 
 [project.scripts]
 playout = "playout.__main__:main"
+playout-worker = "playout.worker:main"
 
 [tool.setuptools.packages.find]
 include = ["playout*"]

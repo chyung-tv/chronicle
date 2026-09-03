@@ -10,7 +10,7 @@ While a story is live, the owner cannot edit the birth sheet — only god tools 
 
 ## Run
 
-Two processes: FastAPI owns the catalog, per-story SQLite, and inference; Next.js is the chrome.
+Two processes locally: FastAPI (catalog, jobs, inference) and Next.js. Long LLM work (wizard, tick, day) is a **job** on the catalog. With no `DATABASE_URL`, the API also runs an inline worker. On Railway, `start.sh` runs FastAPI, `python -m playout.worker`, and Next.
 
 ```bash
 python3 -m venv .venv
@@ -31,23 +31,23 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The catalog lists stories. 
 
 Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731). Agents are [pydantic-ai](https://ai.pydantic.dev/) `Agent`s (`OpenRouterModel`); set `PLAYOUT_LLM_MODE=mock` to force heuristics even when a key is present.
 
-The play UI subscribes to `GET /api/stories/{id}/stream`. `POST /api/stories/{id}/tick` only starts a slot; the tape updates as referee tools commit.
+The play UI subscribes to `GET /api/stories/{id}/stream`. `POST /api/stories/{id}/tick` enqueues a job and returns `{accepted: true}`; the tape updates as the worker commits.
 
 Auth is stubbed (`X-User-Id` / cookie / `PLAYOUT_DEV_USER_ID`, default `dev-owner`). Session helpers in `playout/auth.py` and `web/lib/auth.ts` are the swap point for better-auth or Auth.js.
 
 ## Catalog and files
 
-- `catalog.db` — story rows (`PLAYOUT_CATALOG` to override). On Railway, the catalog is a Postgres table instead (`DATABASE_URL` from the Postgres plugin).
+- `catalog.db` — story rows and the `jobs` queue (`PLAYOUT_CATALOG` to override). On Railway, the catalog is a Postgres table (`DATABASE_URL` from the Postgres plugin).
 - `data/stories/{id}.db` — sealed canon per story (`PLAYOUT_STORIES_DIR`). On Railway each story is a Postgres schema `story_<id>`.
 - `scenarios/harbors_end.json` — seed for 港尾
 
 ## Railway
 
-The Dockerfile runs FastAPI on `127.0.0.1:8765` and Next.js on `$PORT`. Set `DATABASE_URL` to `${{Postgres.DATABASE_URL}}` on the `chronicle` service. Optional: `OPENROUTER_API_KEY` for live models.
+The Dockerfile runs FastAPI on `127.0.0.1:8765`, a job worker, and Next.js on `$PORT`. Set `DATABASE_URL` to `${{Postgres.DATABASE_URL}}` on the `chronicle` service. Optional: `OPENROUTER_API_KEY` for live models. `PLAYOUT_WORKER=external` (the image default) so only the worker process drains jobs.
 
 ## How it works
 
-Canon is SQLite. The event tape, diaries, and chapters are append-only.
+Canon is append-only (SQLite locally, Postgres on Railway). The event tape, diaries, and chapters cannot be rewritten.
 
 ```
 SteerAgent (dawn, off-budget) → queues injections

@@ -229,10 +229,6 @@ export function DesignMap({
       {selectedLoc && !readonly ? (
         <div className="map-inspector">
           <label>
-            id
-            <input value={selectedLoc.id} readOnly />
-          </label>
-          <label>
             名
             <input
               value={selectedLoc.name}

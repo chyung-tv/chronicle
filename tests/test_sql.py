@@ -1,4 +1,4 @@
-from playout.sql import qmark_to_percent, schema_name, story_source
+from playout.sql import adapt_postgres_sql, qmark_to_percent, schema_name, story_source
 
 
 def test_schema_name_uuid():
@@ -17,3 +17,9 @@ def test_story_source():
 def test_qmark_to_percent():
     sql = "SELECT * FROM stories WHERE id=? OR slug=?"
     assert qmark_to_percent(sql) == "SELECT * FROM stories WHERE id=%s OR slug=%s"
+
+
+def test_insert_or_ignore():
+    out = adapt_postgres_sql("INSERT OR IGNORE INTO edges(a, b) VALUES(?,?)")
+    assert "ON CONFLICT DO NOTHING" in out
+    assert "%s" in out

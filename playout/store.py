@@ -148,6 +148,9 @@ class StoryStore:
                     "ALTER TABLE stories ADD COLUMN sketch_json TEXT NOT NULL DEFAULT '{}'"
                 )
             self.cx.commit()
+            from playout import jobs as jobmod
+
+            jobmod.ensure_jobs(self)
             return
         self.catalog_path.parent.mkdir(parents=True, exist_ok=True)
         self.stories_dir.mkdir(parents=True, exist_ok=True)
@@ -162,6 +165,9 @@ class StoryStore:
                 "ALTER TABLE stories ADD COLUMN sketch_json TEXT NOT NULL DEFAULT '{}'"
             )
         self.cx.commit()
+        from playout import jobs as jobmod
+
+        jobmod.ensure_jobs(self)
 
     def close(self) -> None:
         self.cx.close()

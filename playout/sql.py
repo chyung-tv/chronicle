@@ -50,6 +50,16 @@ def qmark_to_percent(sql: str) -> str:
     return sql.replace("?", "%s")
 
 
+def adapt_postgres_sql(sql: str) -> str:
+    """Sqlite-shaped SQL → Postgres (placeholders + INSERT OR IGNORE)."""
+    ignore = bool(re.search(r"(?i)^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", sql))
+    stmt = re.sub(r"(?i)^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", "INSERT INTO", sql)
+    stmt = qmark_to_percent(stmt)
+    if ignore and "ON CONFLICT" not in stmt.upper():
+        stmt = stmt.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
+    return stmt
+
+
 def insert_returning_id(cx: Any, sql: str, params: Sequence[Any] = ()) -> int:
     stmt = sql.strip().rstrip(";")
     if "RETURNING" not in stmt.upper():
@@ -107,7 +117,7 @@ class PgConnection:
         self.row_factory = None
 
     def execute(self, sql: str, params: Sequence[Any] = ()) -> PgCursor:
-        adapted = qmark_to_percent(sql)
+        adapted = adapt_postgres_sql(sql)
         with self._lock:
             cur = self._conn.execute(adapted, tuple(params), prepare=False)
             if cur.description is None:
