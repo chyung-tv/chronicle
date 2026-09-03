@@ -55,6 +55,10 @@ Co-located replies do not consume B's later scheduled run. A's scheduled beat ha
 
 Steer never writes a kill, never overwrites a goal, never edits the past. Soft: the outcome can fail.
 
+## Cost (later)
+
+When spend matters, keep agent prompts prefix-stable and append-only in the cached prefix so OpenRouter prompt cache can hit. Not implemented yet.
+
 ## Tests
 
 ```bash
