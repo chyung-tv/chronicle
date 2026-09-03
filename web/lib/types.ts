@@ -117,4 +117,101 @@ export type WorldSnapshot = {
   diaries: Record<string, { day: number; scene: number; text: string; importance: number }[]>;
   chapters: Chapter[];
   intents: Intent[];
+  story_id?: string;
+  slug?: string;
+  is_owner?: boolean;
+  can_god?: boolean;
+};
+
+export type ClockSetup = {
+  storm_in_days?: number | null;
+  note?: string;
+};
+
+export type LocationSetup = {
+  id: string;
+  name: string;
+  description: string;
+  x: number;
+  y: number;
+  intact?: boolean;
+};
+
+export type ActorSetup = {
+  id: string;
+  name: string;
+  location: string;
+  voice: string;
+  want: string;
+  secret: string;
+  constitution: string;
+  goal: string;
+  mood: string;
+};
+
+export type ObjectSetup = {
+  id: string;
+  name: string;
+  description: string;
+  location_id?: string | null;
+  holder_id?: string | null;
+  hidden: boolean;
+};
+
+export type RelationshipSetup = {
+  a: string;
+  b: string;
+  trust: number;
+  resentment: number;
+  notes: string;
+};
+
+export type OpeningEventSetup = {
+  kind: string;
+  summary: string;
+  perceive: string[];
+  actor_id?: string | null;
+  target_id?: string | null;
+};
+
+export type StorySetup = {
+  title: string;
+  days: number;
+  scenes_per_day: number;
+  day_run_multiplier: number;
+  time_labels: string[];
+  weather: string;
+  clock: ClockSetup;
+  worldview: string;
+  locations: LocationSetup[];
+  edges: [string, string][];
+  actors: ActorSetup[];
+  objects: ObjectSetup[];
+  relationships: RelationshipSetup[];
+  opening_events: OpeningEventSetup[];
+};
+
+export type StoryCard = {
+  id: string;
+  slug: string;
+  title: string;
+  owner_id: string;
+  is_owner: boolean;
+  status: "draft" | "live";
+  day: number | null;
+  actor_count: number;
+  location_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StoryDetail = StoryCard & {
+  editable: boolean;
+  can_god: boolean;
+  setup: StorySetup;
+};
+
+export type SessionUser = {
+  id: string;
+  name: string;
 };

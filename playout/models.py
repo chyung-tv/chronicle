@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class MoveAction(BaseModel):
@@ -239,6 +239,151 @@ class MoveResolution(BaseModel):
     leave_perception: str = ""
     arrive_perception: str = ""
     event_id: int | None = None
+
+
+class ClockSetup(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    storm_in_days: int | None = None
+    note: str = ""
+
+
+class LocationSetup(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    name: str
+    description: str
+    x: float = 0
+    y: float = 0
+    intact: bool = True
+
+
+class ActorSetup(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    name: str
+    location: str
+    voice: str
+    want: str
+    secret: str = ""
+    constitution: str
+    goal: str = ""
+    mood: str = "靜"
+
+
+class ObjectSetup(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    name: str
+    description: str
+    location_id: str | None = None
+    holder_id: str | None = None
+    hidden: bool = False
+
+
+class RelationshipSetup(BaseModel):
+    a: str
+    b: str
+    trust: int = 0
+    resentment: int = 0
+    notes: str = ""
+
+
+class OpeningEventSetup(BaseModel):
+    kind: str = "world"
+    summary: str
+    perceive: list[str] = Field(default_factory=list)
+    actor_id: str | None = None
+    target_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class StorySetup(BaseModel):
+    """Birth configuration of a story. Editable only while the story is draft."""
+
+    title: str
+    days: int = 3
+    scenes_per_day: int = 6
+    day_run_multiplier: int = 2
+    time_labels: list[str] = Field(
+        default_factory=lambda: ["黎明", "上午", "正午", "午後", "黃昏", "夜"]
+    )
+    weather: str = ""
+    clock: ClockSetup = Field(default_factory=ClockSetup)
+    worldview: str = ""
+    locations: list[LocationSetup]
+    edges: list[tuple[str, str]] = Field(default_factory=list)
+    actors: list[ActorSetup]
+    objects: list[ObjectSetup] = Field(default_factory=list)
+    relationships: list[RelationshipSetup] = Field(default_factory=list)
+    opening_events: list[OpeningEventSetup] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _refs_exist(self) -> "StorySetup":
+        loc_ids = [loc.id for loc in self.locations]
+        if len(set(loc_ids)) != len(loc_ids):
+            raise ValueError("location ids must be unique")
+        if not loc_ids:
+            raise ValueError("at least one location")
+        actor_ids = [act.id for act in self.actors]
+        if len(set(actor_ids)) != len(actor_ids):
+            raise ValueError("actor ids must be unique")
+        if not actor_ids:
+            raise ValueError("at least one actor")
+        loc_set = set(loc_ids)
+        actor_set = set(actor_ids)
+        obj_ids = [obj.id for obj in self.objects]
+        if len(set(obj_ids)) != len(obj_ids):
+            raise ValueError("object ids must be unique")
+        for act in self.actors:
+            if act.location not in loc_set:
+                raise ValueError(f"actor {act.id} location {act.location} missing")
+            if not act.goal:
+                act.goal = act.want
+        for a, b in self.edges:
+            if a not in loc_set or b not in loc_set:
+                raise ValueError(f"edge {a}-{b} refers to unknown location")
+        for obj in self.objects:
+            if obj.location_id and obj.location_id not in loc_set:
+                raise ValueError(f"object {obj.id} location missing")
+            if obj.holder_id and obj.holder_id not in actor_set:
+                raise ValueError(f"object {obj.id} holder missing")
+        for rel in self.relationships:
+            if rel.a not in actor_set or rel.b not in actor_set:
+                raise ValueError(f"relationship {rel.a}->{rel.b} unknown actor")
+        for ev in self.opening_events:
+            for pid in ev.perceive:
+                if pid not in actor_set:
+                    raise ValueError(f"opening event perceives unknown actor {pid}")
+        return self
+
+
+def empty_setup(title: str = "未名") -> StorySetup:
+    return StorySetup(
+        title=title,
+        worldview="",
+        weather="天色未定。",
+        clock=ClockSetup(note=""),
+        locations=[
+            LocationSetup(
+                id="place",
+                name="一處",
+                description="尚無描述。",
+                x=270,
+                y=180,
+            )
+        ],
+        edges=[],
+        actors=[
+            ActorSetup(
+                id="someone",
+                name="某人",
+                location="place",
+                voice="尚未定腔。",
+                want="尚未定願。",
+                secret="",
+                constitution="尚未定性。",
+                goal="尚未定願。",
+                mood="靜",
+            )
+        ],
+    )
 
 
 def action_from_dict(data: dict[str, Any]) -> Action:

@@ -46,9 +46,11 @@ export function Cast({
           <p className="entry">
             <b>深願</b> {current.want}
           </p>
-          <p className="entry">
-            <b>秘密</b> {current.secret}
-          </p>
+          {current.secret ? (
+            <p className="entry">
+              <b>秘密</b> {current.secret}
+            </p>
+          ) : null}
           <p className="entry">
             <b>隨身</b>{" "}
             {current.inventory.map((o) => o.name).join("、") || "空手"}

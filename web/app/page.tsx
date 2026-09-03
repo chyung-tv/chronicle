@@ -1,5 +1,5 @@
-import { PlayOutApp } from "@/components/PlayOutApp";
+import { StoryCatalog } from "@/components/StoryCatalog";
 
 export default function Page() {
-  return <PlayOutApp />;
+  return <StoryCatalog />;
 }

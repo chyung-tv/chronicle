@@ -4,13 +4,13 @@ A small sealed-canon story simulation. You design a town, let characters act, in
 
 The sim writes in **Taiwan Traditional Chinese** (書面語 for narration, diaries, tape, and chapters; spoken register for dialogue). IDs stay English.
 
-Harbor's End / 港尾 ships as the first pressure-cooker: four people, six places, a stolen skiff, an affair, a storm in three days.
+Stories are first-class objects. Each story has a **setup** (worldview, map, cast) and, once started, a sealed **canon**. Harbor's End / 港尾 is the first seeded live story: four people, six places, a stolen skiff, an affair, a storm in three days.
 
-If you already have a `playout.db` from an English seed, **Reset world** in the UI (or delete the database) so the Chinese scenario loads.
+While a story is live, the owner cannot edit the birth sheet — only god tools (inject / steer). **重置世界** is temporary scaffolding: it unseals the story back to draft so you can edit setup again. It will be removed once stories are unique and irreplaceable.
 
 ## Run
 
-Two processes: FastAPI owns SQLite and inference; Next.js is the UI.
+Two processes: FastAPI owns the catalog, per-story SQLite, and inference; Next.js is the chrome.
 
 ```bash
 python3 -m venv .venv
@@ -27,11 +27,19 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The Next app rewrites `/api/*` to FastAPI on [http://127.0.0.1:8765](http://127.0.0.1:8765) (`PLAYOUT_API_ORIGIN` to override).
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The catalog lists stories. Enter a live board at `/s/{id}`; the owner designs a draft at `/s/{id}/design`. The Next app rewrites `/api/*` to FastAPI on [http://127.0.0.1:8765](http://127.0.0.1:8765) (`PLAYOUT_API_ORIGIN` to override). `/api/auth/*` is reserved for better-auth / Auth.js later (Next `afterFiles` rewrite).
 
 Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731). Agents are [pydantic-ai](https://ai.pydantic.dev/) `Agent`s (`OpenRouterModel`); set `PLAYOUT_LLM_MODE=mock` to force heuristics even when a key is present.
 
-The UI subscribes to `GET /api/stream` (SSE from a read-only SQLite connection). `POST /api/tick` only starts a slot; the tape updates as referee tools commit.
+The play UI subscribes to `GET /api/stories/{id}/stream`. `POST /api/stories/{id}/tick` only starts a slot; the tape updates as referee tools commit.
+
+Auth is stubbed (`X-User-Id` / cookie / `PLAYOUT_DEV_USER_ID`, default `dev-owner`). Session helpers in `playout/auth.py` and `web/lib/auth.ts` are the swap point for better-auth or Auth.js.
+
+## Catalog and files
+
+- `catalog.db` — story rows (`PLAYOUT_CATALOG` to override)
+- `data/stories/{id}.db` — sealed canon per story (`PLAYOUT_STORIES_DIR`)
+- `scenarios/harbors_end.json` — seed for 港尾
 
 ## How it works
 
