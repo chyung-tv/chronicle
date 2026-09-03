@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class MoveAction(BaseModel):
@@ -241,16 +241,14 @@ class MoveResolution(BaseModel):
     event_id: int | None = None
 
 
-class ClockSetup(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    storm_in_days: int | None = None
-    note: str = ""
+MAX_ACTORS = 8
+MAX_TURNS_PER_DAY = 8
 
 
 class LocationSetup(BaseModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     name: str
-    description: str
+    description: str = ""
     x: float = 0
     y: float = 0
     intact: bool = True
@@ -260,10 +258,10 @@ class ActorSetup(BaseModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     name: str
     location: str
-    voice: str
-    want: str
+    voice: str = ""
+    want: str = ""
     secret: str = ""
-    constitution: str
+    constitution: str = ""
     goal: str = ""
     mood: str = "靜"
 
@@ -271,7 +269,7 @@ class ActorSetup(BaseModel):
 class ObjectSetup(BaseModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     name: str
-    description: str
+    description: str = ""
     location_id: str | None = None
     holder_id: str | None = None
     hidden: bool = False
@@ -285,34 +283,55 @@ class RelationshipSetup(BaseModel):
     notes: str = ""
 
 
-class OpeningEventSetup(BaseModel):
-    kind: str = "world"
-    summary: str
-    perceive: list[str] = Field(default_factory=list)
-    actor_id: str | None = None
-    target_id: str | None = None
-    payload: dict[str, Any] = Field(default_factory=dict)
+class LocationSketch(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    name: str = ""
+    note: str = ""
+    x: float = 0
+    y: float = 0
+
+
+class ActorSketch(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    name: str = ""
+    note: str = ""
+    location: str = ""
+
+
+class ObjectSketch(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    name: str = ""
+    note: str = ""
+    location_id: str | None = None
+    holder_id: str | None = None
+
+
+class RelationshipSketch(BaseModel):
+    a: str
+    b: str
+    note: str = ""
+
+
+def _clamp_turns(n: int, hi: int) -> tuple[int, int]:
+    n = max(1, min(MAX_ACTORS, n))
+    hi = max(n, min(MAX_TURNS_PER_DAY, hi))
+    return n, hi
 
 
 class StorySetup(BaseModel):
-    """Birth configuration of a story. Editable only while the story is draft."""
+    """Engine birth configuration. Editable only while the story is draft."""
 
     title: str
-    days: int = 3
-    scenes_per_day: int = 6
-    day_run_multiplier: int = 2
-    time_labels: list[str] = Field(
-        default_factory=lambda: ["黎明", "上午", "正午", "午後", "黃昏", "夜"]
-    )
-    weather: str = ""
-    clock: ClockSetup = Field(default_factory=ClockSetup)
+    turns_per_day_min: int = 1
+    turns_per_day_max: int = MAX_TURNS_PER_DAY
     worldview: str = ""
+    opening_situation: str = ""
+    opening_events: str = ""
     locations: list[LocationSetup]
     edges: list[tuple[str, str]] = Field(default_factory=list)
     actors: list[ActorSetup]
     objects: list[ObjectSetup] = Field(default_factory=list)
     relationships: list[RelationshipSetup] = Field(default_factory=list)
-    opening_events: list[OpeningEventSetup] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _refs_exist(self) -> "StorySetup":
@@ -326,11 +345,17 @@ class StorySetup(BaseModel):
             raise ValueError("actor ids must be unique")
         if not actor_ids:
             raise ValueError("at least one actor")
+        if len(actor_ids) > MAX_ACTORS:
+            raise ValueError(f"at most {MAX_ACTORS} actors")
         loc_set = set(loc_ids)
         actor_set = set(actor_ids)
         obj_ids = [obj.id for obj in self.objects]
         if len(set(obj_ids)) != len(obj_ids):
             raise ValueError("object ids must be unique")
+        n = len(actor_ids)
+        lo, hi = _clamp_turns(n, self.turns_per_day_max)
+        self.turns_per_day_min = lo
+        self.turns_per_day_max = hi
         for act in self.actors:
             if act.location not in loc_set:
                 raise ValueError(f"actor {act.id} location {act.location} missing")
@@ -347,10 +372,58 @@ class StorySetup(BaseModel):
         for rel in self.relationships:
             if rel.a not in actor_set or rel.b not in actor_set:
                 raise ValueError(f"relationship {rel.a}->{rel.b} unknown actor")
-        for ev in self.opening_events:
-            for pid in ev.perceive:
-                if pid not in actor_set:
-                    raise ValueError(f"opening event perceives unknown actor {pid}")
+        return self
+
+
+class StorySketch(BaseModel):
+    """Human notes the story wizard enriches into StorySetup."""
+
+    title: str = "未名"
+    worldview: str = ""
+    opening_situation: str = ""
+    opening_events: str = ""
+    turns_per_day_max: int = MAX_TURNS_PER_DAY
+    locations: list[LocationSketch]
+    edges: list[tuple[str, str]] = Field(default_factory=list)
+    actors: list[ActorSketch]
+    objects: list[ObjectSketch] = Field(default_factory=list)
+    relationships: list[RelationshipSketch] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _refs_exist(self) -> "StorySketch":
+        loc_ids = [loc.id for loc in self.locations]
+        if len(set(loc_ids)) != len(loc_ids):
+            raise ValueError("location ids must be unique")
+        if not loc_ids:
+            raise ValueError("at least one location")
+        actor_ids = [act.id for act in self.actors]
+        if len(set(actor_ids)) != len(actor_ids):
+            raise ValueError("actor ids must be unique")
+        if not actor_ids:
+            raise ValueError("at least one actor")
+        if len(actor_ids) > MAX_ACTORS:
+            raise ValueError(f"at most {MAX_ACTORS} actors")
+        loc_set = set(loc_ids)
+        actor_set = set(actor_ids)
+        _, self.turns_per_day_max = _clamp_turns(
+            len(actor_ids), self.turns_per_day_max
+        )
+        for act in self.actors:
+            if act.location and act.location not in loc_set:
+                raise ValueError(f"actor {act.id} location {act.location} missing")
+            if not act.location:
+                act.location = loc_ids[0]
+        for a, b in self.edges:
+            if a not in loc_set or b not in loc_set:
+                raise ValueError(f"edge {a}-{b} refers to unknown location")
+        for obj in self.objects:
+            if obj.location_id and obj.location_id not in loc_set:
+                raise ValueError(f"object {obj.id} location missing")
+            if obj.holder_id and obj.holder_id not in actor_set:
+                raise ValueError(f"object {obj.id} holder missing")
+        for rel in self.relationships:
+            if rel.a not in actor_set or rel.b not in actor_set:
+                raise ValueError(f"relationship {rel.a}->{rel.b} unknown actor")
         return self
 
 
@@ -358,8 +431,10 @@ def empty_setup(title: str = "未名") -> StorySetup:
     return StorySetup(
         title=title,
         worldview="",
-        weather="天色未定。",
-        clock=ClockSetup(note=""),
+        opening_situation="",
+        opening_events="",
+        turns_per_day_min=1,
+        turns_per_day_max=MAX_TURNS_PER_DAY,
         locations=[
             LocationSetup(
                 id="place",
@@ -384,6 +459,71 @@ def empty_setup(title: str = "未名") -> StorySetup:
             )
         ],
     )
+
+
+def empty_sketch(title: str = "未名") -> StorySketch:
+    return StorySketch(
+        title=title,
+        locations=[
+            LocationSketch(id="place", name="一處", note="", x=270, y=180)
+        ],
+        actors=[
+            ActorSketch(id="someone", name="某人", note="", location="place")
+        ],
+        turns_per_day_max=MAX_TURNS_PER_DAY,
+    )
+
+
+def sketch_from_setup(setup: StorySetup) -> StorySketch:
+    return StorySketch(
+        title=setup.title,
+        worldview=setup.worldview,
+        opening_situation=setup.opening_situation,
+        opening_events=setup.opening_events,
+        turns_per_day_max=setup.turns_per_day_max,
+        locations=[
+            LocationSketch(
+                id=loc.id, name=loc.name, note=loc.description, x=loc.x, y=loc.y
+            )
+            for loc in setup.locations
+        ],
+        edges=list(setup.edges),
+        actors=[
+            ActorSketch(
+                id=act.id,
+                name=act.name,
+                note=act.want or act.constitution,
+                location=act.location,
+            )
+            for act in setup.actors
+        ],
+        objects=[
+            ObjectSketch(
+                id=obj.id,
+                name=obj.name,
+                note=obj.description,
+                location_id=obj.location_id,
+                holder_id=obj.holder_id,
+            )
+            for obj in setup.objects
+        ],
+        relationships=[
+            RelationshipSketch(a=rel.a, b=rel.b, note=rel.notes)
+            for rel in setup.relationships
+        ],
+    )
+
+
+def parse_story_pack(raw: dict[str, Any]) -> tuple[StorySketch, StorySetup]:
+    """Accept `{sketch, setup}` packs or a bare setup dict."""
+    inner = raw.get("setup")
+    if isinstance(inner, dict) and inner.get("actors"):
+        setup = StorySetup.model_validate(inner)
+        if raw.get("sketch"):
+            return StorySketch.model_validate(raw["sketch"]), setup
+        return sketch_from_setup(setup), setup
+    setup = StorySetup.model_validate(raw)
+    return sketch_from_setup(setup), setup
 
 
 def action_from_dict(data: dict[str, Any]) -> Action:

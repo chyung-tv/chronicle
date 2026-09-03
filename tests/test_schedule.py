@@ -16,7 +16,7 @@ def test_bag_length_and_coverage():
     ids = ["lena", "tomas", "mara", "ellis"]
     rng = random.Random(0)
     for _ in range(30):
-        bag = plan_actor_bag(ids, rng, multiplier=2)
+        bag = plan_actor_bag(ids, rng, lo=4, hi=8)
         assert 4 <= len(bag) <= 8
         assert set(ids) <= set(bag)
 
@@ -48,7 +48,7 @@ def test_build_plan_excludes_steer_from_length(tmp_path):
     ]
     plan = build_day_plan(world, injections, rng)
     n = len(world.living_actors())
-    assert n <= plan["length"] <= n * 2
+    assert n <= plan["length"] <= 8
     actors = [s for s in plan["slots"] if s["kind"] == "actor"]
     events = [s for s in plan["slots"] if s["kind"] == "event"]
     assert len(actors) == plan["length"]

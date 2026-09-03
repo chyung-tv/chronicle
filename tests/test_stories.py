@@ -2,9 +2,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from playout.models import StorySetup, empty_setup
+from playout.models import parse_story_pack, empty_setup
 from playout.store import StoryStore
 import playout.app as appmod
+import json
 
 HARBORS = Path(__file__).resolve().parent.parent / "scenarios" / "harbors_end.json"
 
@@ -22,10 +23,15 @@ def _client(tmp_path, monkeypatch) -> TestClient:
 
 
 def test_harbors_end_setup_validates():
-    raw = HARBORS.read_text(encoding="utf-8")
-    setup = StorySetup.model_validate_json(raw)
+    raw = json.loads(HARBORS.read_text(encoding="utf-8"))
+    sketch, setup = parse_story_pack(raw)
     assert setup.title == "港尾"
+    assert sketch.title == "港尾"
     assert len(setup.actors) == 4
+    assert setup.turns_per_day_min == 4
+    assert setup.turns_per_day_max == 8
+    assert isinstance(setup.opening_events, str)
+    assert "storm_in_days" not in setup.model_dump()
 
 
 def test_me_returns_dev_user(tmp_path, monkeypatch):

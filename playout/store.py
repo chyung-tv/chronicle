@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 
 from playout.canon import World, unlink_db, world_from_setup
-from playout.models import StorySetup, empty_setup
+from playout.models import StorySetup, StorySketch, empty_setup, empty_sketch, parse_story_pack, sketch_from_setup
+from playout.wizard import stitch
 
 HARBORS_END = Path(__file__).resolve().parent.parent / "scenarios" / "harbors_end.json"
 
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS stories (
     owner_id TEXT NOT NULL,
     status TEXT NOT NULL,
     setup_json TEXT NOT NULL,
+    sketch_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -71,11 +73,19 @@ class StoryRecord:
     owner_id: str
     status: str
     setup_json: str
+    sketch_json: str
     created_at: str
     updated_at: str
 
     def setup(self) -> dict[str, Any]:
         return json.loads(self.setup_json)
+
+    def sketch(self) -> dict[str, Any]:
+        try:
+            data = json.loads(self.sketch_json or "{}")
+        except json.JSONDecodeError:
+            data = {}
+        return data if isinstance(data, dict) else {}
 
     @property
     def editable(self) -> bool:
@@ -93,6 +103,8 @@ def _slugify(title: str) -> str:
 
 
 def _row(r: sqlite3.Row) -> StoryRecord:
+    keys = set(r.keys())
+    sketch = r["sketch_json"] if "sketch_json" in keys else "{}"
     return StoryRecord(
         id=r["id"],
         slug=r["slug"],
@@ -100,6 +112,7 @@ def _row(r: sqlite3.Row) -> StoryRecord:
         owner_id=r["owner_id"],
         status=r["status"],
         setup_json=r["setup_json"],
+        sketch_json=sketch or "{}",
         created_at=r["created_at"],
         updated_at=r["updated_at"],
     )
@@ -117,6 +130,11 @@ class StoryStore:
         )
         self.cx.row_factory = sqlite3.Row
         self.cx.executescript(CATALOG_SCHEMA)
+        cols = {row[1] for row in self.cx.execute("PRAGMA table_info(stories)")}
+        if "sketch_json" not in cols:
+            self.cx.execute(
+                "ALTER TABLE stories ADD COLUMN sketch_json TEXT NOT NULL DEFAULT '{}'"
+            )
         self.cx.commit()
 
     def close(self) -> None:
@@ -166,6 +184,7 @@ class StoryStore:
         owner_id: str,
         setup: StorySetup,
         *,
+        sketch: StorySketch | None = None,
         slug: str | None = None,
         status: str = "draft",
     ) -> StoryRecord:
@@ -174,11 +193,13 @@ class StoryStore:
             wanted = slug or _slugify(setup.title) or f"story-{sid[:8]}"
             unique = self._unique_slug(wanted)
             now = _now()
+            sketch = sketch or sketch_from_setup(setup)
             payload = json.dumps(setup.model_dump(mode="json"), ensure_ascii=False)
+            sketch_payload = json.dumps(sketch.model_dump(mode="json"), ensure_ascii=False)
             self.cx.execute(
                 """INSERT INTO stories
-                   (id, slug, title, owner_id, status, setup_json, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                   (id, slug, title, owner_id, status, setup_json, sketch_json, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
                 (
                     sid,
                     unique,
@@ -186,6 +207,7 @@ class StoryStore:
                     owner_id,
                     status,
                     payload,
+                    sketch_payload,
                     now,
                     now,
                 ),
@@ -197,14 +219,20 @@ class StoryStore:
         src = self.require(ref)
         setup = StorySetup.model_validate(src.setup())
         setup.title = f"{setup.title}（副本）"
+        try:
+            sketch = StorySketch.model_validate(src.sketch()) if src.sketch() else sketch_from_setup(setup)
+            sketch.title = setup.title
+        except Exception:
+            sketch = sketch_from_setup(setup)
         base = f"{src.slug}-copy"
-        return self.create(owner_id, setup, slug=base, status="draft")
+        return self.create(owner_id, setup, sketch=sketch, slug=base, status="draft")
 
     def update_setup(
         self,
         ref: str,
         *,
         setup: StorySetup | None = None,
+        sketch: StorySketch | None = None,
         title: str | None = None,
         slug: str | None = None,
     ) -> StoryRecord:
@@ -213,11 +241,26 @@ class StoryStore:
             if rec.status != "draft":
                 raise SealedError("sealed")
             current = StorySetup.model_validate(rec.setup())
+            try:
+                current_sketch = (
+                    StorySketch.model_validate(rec.sketch())
+                    if rec.sketch()
+                    else sketch_from_setup(current)
+                )
+            except Exception:
+                current_sketch = sketch_from_setup(current)
             if setup is not None:
                 current = setup
+            if sketch is not None:
+                current_sketch = sketch
+                current = stitch(sketch, current)
             if title is not None:
                 current.title = title
+                current_sketch.title = title
             payload = json.dumps(current.model_dump(mode="json"), ensure_ascii=False)
+            sketch_payload = json.dumps(
+                current_sketch.model_dump(mode="json"), ensure_ascii=False
+            )
             new_title = current.title
             new_slug = rec.slug
             if slug is not None:
@@ -232,9 +275,9 @@ class StoryStore:
                     raise SlugTaken(wanted)
                 new_slug = wanted
             self.cx.execute(
-                """UPDATE stories SET title=?, slug=?, setup_json=?, updated_at=?
+                """UPDATE stories SET title=?, slug=?, setup_json=?, sketch_json=?, updated_at=?
                    WHERE id=?""",
-                (new_title, new_slug, payload, _now(), rec.id),
+                (new_title, new_slug, payload, sketch_payload, _now(), rec.id),
             )
             self.cx.commit()
             return self.require(rec.id)
@@ -293,8 +336,10 @@ class StoryStore:
             if n:
                 return None
         raw = json.loads(HARBORS_END.read_text(encoding="utf-8"))
-        setup = StorySetup.model_validate(raw)
-        rec = self.create(owner_id, setup, slug="harbors-end", status="draft")
+        sketch, setup = parse_story_pack(raw)
+        rec = self.create(
+            owner_id, setup, sketch=sketch, slug="harbors-end", status="draft"
+        )
         world = world_from_setup(
             self.canon_path(rec.id), setup.model_dump(mode="json")
         )
@@ -304,3 +349,7 @@ class StoryStore:
 
 def default_setup() -> StorySetup:
     return empty_setup()
+
+
+def default_sketch() -> StorySketch:
+    return empty_sketch()
