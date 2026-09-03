@@ -4,13 +4,12 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DesignMap } from "@/components/DesignMap";
-import { api, fetchMe, fetchStory, postStart, postWizard } from "@/lib/api";
+import { api, fetchMe, fetchStory, postWizard } from "@/lib/api";
 import type {
   ActorSketch,
   ObjectSketch,
   RelationshipSketch,
   StoryDetail,
-  StorySetup,
   StorySketch,
 } from "@/lib/types";
 
@@ -28,12 +27,11 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
   const router = useRouter();
   const [story, setStory] = useState<StoryDetail | null>(null);
   const [sketch, setSketch] = useState<StorySketch | null>(null);
-  const [setup, setSetup] = useState<StorySetup | null>(null);
   const [slug, setSlug] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [enriched, setEnriched] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,9 +46,14 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
         }
         setStory(rec);
         setSketch(clone(rec.sketch));
-        setSetup(clone(rec.setup));
         setSlug(rec.slug);
-        setEnriched(!!rec.setup.actors.some((a) => a.voice && a.voice !== "尚未定腔。"));
+        setHasDraft(
+          !!(
+            rec.setup.opening_situation?.trim() ||
+            rec.setup.worldview?.trim() ||
+            rec.setup.actors.some((a) => a.voice && a.voice !== "尚未定腔。")
+          )
+        );
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -65,28 +68,21 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
   const setSk = (patch: Partial<StorySketch>) => {
     setSketch((prev) => (prev ? { ...prev, ...patch } : prev));
   };
-  const setSt = (patch: Partial<StorySetup>) => {
-    setSetup((prev) => (prev ? { ...prev, ...patch } : prev));
-  };
 
   const actorName = (id: string) =>
-    sketch?.actors.find((a) => a.id === id)?.name ||
-    setup?.actors.find((a) => a.id === id)?.name ||
-    id;
+    sketch?.actors.find((a) => a.id === id)?.name || id;
 
   const persist = async () => {
-    if (!story || !sketch || !setup || readonly) return null;
+    if (!story || !sketch || readonly) return null;
     const rec = await api<StoryDetail>(`/api/stories/${story.id}`, {
       method: "PATCH",
       body: JSON.stringify({
         slug,
         sketch: { ...sketch, title: sketch.title },
-        setup: { ...setup, title: sketch.title },
       }),
     });
     setStory(rec);
     setSketch(clone(rec.sketch));
-    setSetup(clone(rec.setup));
     setSlug(rec.slug);
     return rec;
   };
@@ -109,35 +105,13 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
 
   const wizard = async () => {
     if (!story || readonly) return;
-    if (enriched && !window.confirm("再請巫師會覆寫補完結果。速寫保留。繼續？")) {
-      return;
-    }
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       await persist();
-      const rec = await postWizard(story.id);
-      setStory(rec);
-      setSketch(clone(rec.sketch));
-      setSetup(clone(rec.setup));
-      setEnriched(true);
-      setNotice("巫師已補完。請核對下面的結果，再開始演繹。");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const start = async () => {
-    if (!story) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (!readonly) await persist();
-      const rec = await postStart(story.id);
-      router.push(`/s/${rec.id}`);
+      await postWizard(story.id);
+      router.push(`/s/${story.id}/design/review`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -171,7 +145,7 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
     );
   }
 
-  if (!story || !sketch || !setup) {
+  if (!story || !sketch) {
     return (
       <header className="masthead">
         <div className="mast-title">
@@ -221,6 +195,9 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
         <div className="mast-title">
           <p className="chrome-links">
             <Link href="/">故事</Link>
+            {hasDraft || readonly ? (
+              <Link href={`/s/${story.id}/design/review`}>定稿</Link>
+            ) : null}
             {story.status === "live" ? (
               <Link href={`/s/${story.id}`}>進入演繹</Link>
             ) : null}
@@ -228,8 +205,8 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
           <h1>{sketch.title || "世界設定"}</h1>
           <p className="sub">
             {readonly
-              ? "世界已封。此為開演時的出生設定，只讀。要以神諭改明日，請回演繹。"
-              : "先寫速寫，可請巫師補完細節，再開始演繹。世界即封。"}
+              ? "世界已封。速寫只讀。定稿在另一頁。"
+              : "寫速寫，送交巫師。補完後到定稿表核對，不再重跑巫師。"}
           </p>
         </div>
         <div className="controls">
@@ -238,16 +215,19 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
               <button type="button" disabled={busy} onClick={() => save()}>
                 儲存速寫
               </button>
-              <button type="button" disabled={busy} onClick={wizard}>
-                {enriched ? "再請巫師" : "請巫師補完"}
-              </button>
-              <button type="button" disabled={busy} onClick={start}>
-                開始演繹
-              </button>
+              {hasDraft ? (
+                <Link className="btn" href={`/s/${story.id}/design/review`}>
+                  查看定稿
+                </Link>
+              ) : (
+                <button type="button" disabled={busy} onClick={wizard}>
+                  送交巫師
+                </button>
+              )}
             </>
           ) : (
-            <Link className="btn" href={`/s/${story.id}`}>
-              回演繹
+            <Link className="btn" href={`/s/${story.id}/design/review`}>
+              查看定稿
             </Link>
           )}
         </div>
@@ -262,10 +242,7 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
             標題
             <input
               value={sketch.title}
-              onChange={(e) => {
-                setSk({ title: e.target.value });
-                setSt({ title: e.target.value });
-              }}
+              onChange={(e) => setSk({ title: e.target.value })}
             />
             <span className="field-hint">給這則故事的名字。</span>
           </label>
@@ -333,26 +310,9 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
           <DesignMap
             locations={sketch.locations}
             edges={sketch.edges}
-            descriptions={
-              enriched
-                ? Object.fromEntries(
-                    setup.locations.map((l) => [l.id, l.description])
-                  )
-                : undefined
-            }
             readonly={readonly}
             onLocations={(next) => setSk({ locations: next })}
             onEdges={(next) => setSk({ edges: next })}
-            onDescription={
-              enriched
-                ? (id, description) =>
-                    setSt({
-                      locations: setup.locations.map((l) =>
-                        l.id === id ? { ...l, description } : l
-                      ),
-                    })
-                : undefined
-            }
             onAdd={(x, y) => {
               const id = nextId("place", usedLoc);
               setSk({
@@ -619,185 +579,6 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
             加一層關係
           </button>
         </fieldset>
-
-        {enriched ? (
-          <fieldset disabled={readonly} className="design-section">
-            <h2>補完結果</h2>
-            <p className="hint-inline">
-              巫師寫下的細節。可改。再請巫師會整份覆寫。
-            </p>
-            <label className="wide">
-              世界觀
-              <textarea
-                rows={4}
-                value={setup.worldview}
-                onChange={(e) => setSt({ worldview: e.target.value })}
-              />
-            </label>
-            <label className="wide">
-              開場情勢
-              <textarea
-                rows={3}
-                value={setup.opening_situation}
-                onChange={(e) => setSt({ opening_situation: e.target.value })}
-              />
-            </label>
-            <label className="wide">
-              開場事件
-              <textarea
-                rows={3}
-                value={setup.opening_events}
-                onChange={(e) => setSt({ opening_events: e.target.value })}
-              />
-            </label>
-            {setup.actors.map((act, i) => (
-              <div className="subcard" key={act.id}>
-                <p className="hint-inline">
-                  {act.name}（{act.id}）
-                </p>
-                <label className="wide">
-                  口吻
-                  <textarea
-                    rows={2}
-                    value={act.voice}
-                    onChange={(e) =>
-                      setSt({
-                        actors: setup.actors.map((a, j) =>
-                          j === i ? { ...a, voice: e.target.value } : a
-                        ),
-                      })
-                    }
-                  />
-                </label>
-                <label className="wide">
-                  深願
-                  <textarea
-                    rows={2}
-                    value={act.want}
-                    onChange={(e) =>
-                      setSt({
-                        actors: setup.actors.map((a, j) =>
-                          j === i ? { ...a, want: e.target.value } : a
-                        ),
-                      })
-                    }
-                  />
-                </label>
-                <label className="wide">
-                  秘密
-                  <textarea
-                    rows={2}
-                    value={act.secret}
-                    onChange={(e) =>
-                      setSt({
-                        actors: setup.actors.map((a, j) =>
-                          j === i ? { ...a, secret: e.target.value } : a
-                        ),
-                      })
-                    }
-                  />
-                </label>
-                <label className="wide">
-                  性情
-                  <textarea
-                    rows={2}
-                    value={act.constitution}
-                    onChange={(e) =>
-                      setSt({
-                        actors: setup.actors.map((a, j) =>
-                          j === i ? { ...a, constitution: e.target.value } : a
-                        ),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-            ))}
-            {setup.objects.map((obj, i) => (
-              <div className="subcard" key={obj.id}>
-                <div className="row">
-                  <label>
-                    物
-                    <input
-                      value={obj.name}
-                      onChange={(e) =>
-                        setSt({
-                          objects: setup.objects.map((o, j) =>
-                            j === i ? { ...o, name: e.target.value } : o
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                </div>
-                <label className="wide">
-                  描述
-                  <textarea
-                    rows={2}
-                    value={obj.description}
-                    onChange={(e) =>
-                      setSt({
-                        objects: setup.objects.map((o, j) =>
-                          j === i ? { ...o, description: e.target.value } : o
-                        ),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-            ))}
-            {setup.relationships.map((rel, i) => (
-              <div className="subcard" key={`${rel.a}-${rel.b}-${i}`}>
-                <p className="hint-inline">
-                  {actorName(rel.a)} → {actorName(rel.b)}
-                </p>
-                <div className="row">
-                  <label>
-                    信
-                    <input
-                      type="number"
-                      value={rel.trust}
-                      onChange={(e) =>
-                        setSt({
-                          relationships: setup.relationships.map((r, j) =>
-                            j === i ? { ...r, trust: Number(e.target.value) } : r
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    怨
-                    <input
-                      type="number"
-                      value={rel.resentment}
-                      onChange={(e) =>
-                        setSt({
-                          relationships: setup.relationships.map((r, j) =>
-                            j === i ? { ...r, resentment: Number(e.target.value) } : r
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                </div>
-                <label className="wide">
-                  註
-                  <input
-                    value={rel.notes}
-                    onChange={(e) =>
-                      setSt({
-                        relationships: setup.relationships.map((r, j) =>
-                          j === i ? { ...r, notes: e.target.value } : r
-                        ),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-            ))}
-          </fieldset>
-        ) : null}
       </form>
     </>
   );
