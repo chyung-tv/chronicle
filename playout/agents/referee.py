@@ -67,7 +67,8 @@ REFEREE_SYSTEM = with_prose("""你是封閉正史模擬的裁判，不是人物�
 - 不可取走仍隱藏、且本回合尚未被察看揭開之物。
 - 不可取走不在此地或已在別人手上之物。
 - 移動只可到相鄰且完好的地點。不可寫未走到之地。
-- 實際說出的話必須放進 speeches，原文加引號，不可只寫「打了招呼」。
+- 不可發明此地沒有的風景或物件。察看、細看、搜看、看看由察看解析器處理，不要用 describe_location 改寫地點底色，也不要把別處的物件寫進此地。
+- 實際說出的話必須放進 speeches。對白裡的停頓、口氣照實記下，交給寫章回的人。
 - 暴力可以失敗。無趁手的兵器、對方未受傷時，欲殺多半只成受傷（attempted_kill）。
 - 若乙方不理（b_text 為空），仍要判定甲方單獨做成了什麼。
 - 對白、summary、perceptions、detail 一律繁體中文。
@@ -92,6 +93,8 @@ def named_present_actor(world: World, actor_id: str, text: str) -> str | None:
 
 
 def named_object(world: World, actor_id: str, text: str, *, held: bool = False) -> str | None:
+    from playout.examine import _name_in_text
+
     actor = world.actor(actor_id)
     rows: list[Any] = []
     if held:
@@ -102,7 +105,7 @@ def named_object(world: World, actor_id: str, text: str, *, held: bool = False) 
     rows.sort(key=lambda o: len(o["name"]), reverse=True)
     low = text.lower()
     for obj in rows:
-        if obj["id"] in text or obj["id"] in low or obj["name"] in text:
+        if obj["id"] in text or obj["id"] in low or _name_in_text(obj["name"], text):
             return obj["id"]
         paren = f"（{obj['id']}）"
         if paren in text or f"({obj['id']})" in text:
@@ -149,8 +152,9 @@ def heuristic_action(world: World, actor_id: str, text: str) -> Action:
             return TakeAction(object_id=oid)
 
     if any(w in raw for w in ("察看", "細看", "搜看", "看看")):
-        oid = named_object(world, actor_id, raw)
-        return ExamineAction(target=oid or loc)
+        from playout.examine import resolve_examine_aim
+
+        return ExamineAction(target=resolve_examine_aim(world, actor_id, raw), intent=raw)
 
     if "寫" in raw and any(w in raw for w in ("紙", "信", "字")):
         return WriteNoteAction(text=raw[:200])
@@ -201,7 +205,7 @@ def action_as_interact_text(world: World, actor_id: str, action: Action) -> str 
         label = obj["name"] if obj else action.object_id
         return f"放下{label}（{action.object_id}）"
     if isinstance(action, ExamineAction):
-        return f"察看{action.target}"
+        return f"察看{action.target}" + (f"：{action.intent}" if action.intent else "")
     if isinstance(action, WriteNoteAction):
         return f"寫下一紙：{action.text}"
     if isinstance(action, MoveAction):

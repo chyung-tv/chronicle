@@ -21,6 +21,7 @@ from playout.memory import retrieve
 from playout.models import (
     Action,
     ActorInner,
+    ExamineAction,
     InteractAction,
     MoveAction,
     WaitAction,
@@ -34,6 +35,7 @@ MAX_ENCOUNTER_ROUNDS = 3
 ACTION_ACTIVITY = {
     "move": "正在前往",
     "interact": "正在行事",
+    "examine": "正在察看",
     "wait": "正在等候",
 }
 
@@ -42,8 +44,9 @@ ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，須守住人格，
 目標由你自己從所見所聞長出。誰也不能替你派一個目標。
 
 用工具在世上行動。讀類工具（survey、recall）不計次數。
-改世界的工具每回合最多四次：move、interact、wait。
-interact 用自然語言寫出你此刻試圖做的事（對誰說話、取物、察看、動手、寫紙等）。
+改世界的工具每回合最多四次：move、examine、interact、wait。
+examine 用來察看此地可見之物、此地本身、或朝相鄰方向望去（望去不會走到那裡）。
+interact 用自然語言寫出其餘試圖做的事（對誰說話、取物、動手、寫紙等）。不要用 interact 察看；用 examine。
 若你點了在場之人的名，工具會先讓對方反應，再由裁判判定雙方實際做成什麼，把你能感知到的結果回給你。
 對方不理、走開、或已來回三次，這場對持即止。
 
@@ -99,6 +102,24 @@ def prepare_move(ctx: RunContext[ActorDeps], tool_def: ToolDefinition) -> ToolDe
     to_schema = props.setdefault("to", {"type": "string"})
     to_schema["enum"] = ids
     to_schema["description"] = "、".join(f"{e.id}（{e.name}）" for e in exits)
+    return tool_def
+
+
+def prepare_examine(
+    ctx: RunContext[ActorDeps], tool_def: ToolDefinition
+) -> ToolDefinition | None:
+    """Inject visible objects, this node, and connected ids as `aim`."""
+    from playout.examine import examine_aims
+
+    aims = examine_aims(ctx.deps.world, ctx.deps.actor_id)
+    if not aims:
+        return None
+    ids = [a[0] for a in aims]
+    schema = tool_def.parameters_json_schema
+    props = schema.setdefault("properties", {})
+    aim_schema = props.setdefault("aim", {"type": "string"})
+    aim_schema["enum"] = ids
+    aim_schema["description"] = "、".join(f"{i}（{label}）" for i, label in aims)
     return tool_def
 
 
@@ -204,6 +225,14 @@ async def _complete_held_interact(deps: ActorDeps, b_text: str | None) -> dict[s
 
 
 async def dispatch_action_async(deps: ActorDeps, action: Action) -> dict[str, Any]:
+    from playout.examine import (
+        apply_examine_async,
+        is_looking_text,
+        resolve_examine_aim,
+        resolution_as_result,
+    )
+    from playout.models import ExamineIntent
+
     if deps.mutates_used >= deps.mutate_budget:
         return {"ok": False, "reason": "budget", "detail": "這一時辰你已動得夠多。"}
     _activity_for(deps, action)
@@ -220,6 +249,29 @@ async def dispatch_action_async(deps: ActorDeps, action: Action) -> dict[str, An
                 action,
             )
         return await _complete_held_interact(deps, text)
+
+    looking = isinstance(action, ExamineAction) or (
+        isinstance(action, InteractAction)
+        and is_looking_text(action.text)
+        and named_present_actor(deps.world, deps.actor_id, action.text) is None
+    )
+    if looking:
+        if isinstance(action, ExamineAction):
+            aim = action.target
+            intent_text = action.intent
+            exam = action
+        else:
+            aim = resolve_examine_aim(deps.world, deps.actor_id, action.text)
+            intent_text = action.text
+            exam = ExamineAction(target=aim, intent=intent_text)
+        res = await apply_examine_async(
+            deps.world,
+            ExamineIntent(actor_id=deps.actor_id, aim=aim, intent=intent_text),
+            deps.llm,
+        )
+        result = resolution_as_result(res)
+        result["action"] = exam.model_dump()
+        return _finish(deps, result, exam)
 
     text = action_as_interact_text(deps.world, deps.actor_id, action)
     if isinstance(action, InteractAction) or (
@@ -391,7 +443,7 @@ class ActorAgent:
 
         @agent.tool
         async def interact(ctx: RunContext[ActorDeps], text: str) -> str:
-            """用自然語言寫出你此刻試圖做的事：對誰說話、取物、察看、動手、寫紙等。"""
+            """用自然語言寫出你此刻試圖做的事：對誰說話、取物、動手、寫紙等。察看請用 examine。"""
             result = await dispatch_action_async(
                 ctx.deps, InteractAction(text=text)
             )
@@ -409,6 +461,14 @@ class ActorAgent:
             async def move(ctx: RunContext[ActorDeps], to: str) -> str:
                 """走到相鄰完好地點。to 只能是當前可走的 location_id。"""
                 result = await dispatch_action_async(ctx.deps, MoveAction(to=to))
+                return format_action_return(ctx.deps.world, ctx.deps.actor_id, result)
+
+            @agent.tool(prepare=prepare_examine)
+            async def examine(ctx: RunContext[ActorDeps], aim: str, intent: str = "") -> str:
+                """察看眼前之物、此地、或朝相鄰方向望去。望去不會走到那裡。"""
+                result = await dispatch_action_async(
+                    ctx.deps, ExamineAction(target=aim, intent=intent)
+                )
                 return format_action_return(ctx.deps.world, ctx.deps.actor_id, result)
 
         prompt = "在這一時辰行動。用工具改世界，再交出心思。"

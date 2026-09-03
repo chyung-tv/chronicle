@@ -155,53 +155,21 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
         return {"ok": True, "event_id": eid}
 
     if isinstance(action, ExamineAction):
-        obj = world.object(action.target)
-        if obj and not obj["destroyed"]:
-            here = (
-                obj["location_id"] == actor["location_id"]
-                or obj["holder_id"] == actor_id
-            )
-            if obj["hidden"] and obj["location_id"] == actor["location_id"]:
-                world.cx.execute("UPDATE objects SET hidden=0 WHERE id=?", (obj["id"],))
-                world.cx.commit()
-                here = True
-            if not here:
-                return {"ok": False, "reason": "not_here"}
-            eid = world.append_event(
-                "examine",
-                f"{actor['name']}察看{obj['name']}：{obj['description']}",
-                actor_id=actor_id,
-                payload={"object_id": obj["id"]},
-            )
-            world.perceive(eid, actor_id, f"你察看{obj['name']}。{obj['description']}")
-            for wid in _witnesses(world, actor["location_id"], {actor_id}):
-                world.perceive(eid, wid, f"{actor['name']}細看{obj['name']}。")
-            return {"ok": True, "event_id": eid}
-        if action.target == actor["location_id"] or action.target in (
-            world.location(actor["location_id"])["name"].lower(),
-            world.location(actor["location_id"])["name"],
-        ):
-            loc = world.location(actor["location_id"])
-            hidden = world.cx.execute(
-                "SELECT * FROM objects WHERE location_id=? AND hidden=1 AND destroyed=0",
-                (loc["id"],),
-            ).fetchall()
-            found = ""
-            if hidden:
-                for h in hidden:
-                    world.cx.execute(
-                        "UPDATE objects SET hidden=0 WHERE id=?", (h["id"],)
-                    )
-                world.cx.commit()
-                found = "此處藏有：" + "、".join(h["name"] for h in hidden) + "。"
-            eid = world.append_event(
-                "examine",
-                f"{actor['name']}搜看{loc['name']}。{found}",
-                actor_id=actor_id,
-            )
-            world.perceive(eid, actor_id, loc["description"] + found)
-            return {"ok": True, "event_id": eid}
-        return {"ok": False, "reason": "unknown_target"}
+        from playout.examine import apply_examine
+        from playout.models import ExamineIntent
+
+        res = apply_examine(
+            world,
+            ExamineIntent(
+                actor_id=actor_id, aim=action.target, intent=action.intent
+            ),
+        )
+        return {
+            "ok": res.ok,
+            "event_id": res.event_id,
+            "reason": res.reason,
+            "summary": res.summary,
+        }
 
     if isinstance(action, WriteNoteAction):
         slug = re.sub(r"[^a-z0-9]+", "_", action.text.lower())[:24] or "zh"
