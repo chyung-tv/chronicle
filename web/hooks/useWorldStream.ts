@@ -14,7 +14,7 @@ export function useWorldStream(storyId: string | null) {
 
   const apply = useCallback((data: WorldSnapshot) => {
     setState(data);
-    if (data.activity_error) setError(data.activity_error);
+    setError(data.activity_error ? data.activity_error : null);
   }, []);
 
   const pull = useCallback(async () => {
