@@ -236,6 +236,17 @@ export type StoryDetail = StoryCard & {
   can_god: boolean;
   setup: StorySetup;
   sketch: StorySketch;
+  agent?: AgentState;
+};
+
+export type AgentState = {
+  kind: string;
+  status: string;
+  actor: string;
+  detail: string;
+  progress: number;
+  gen: number;
+  error: string;
 };
 
 export type SessionUser = {
