@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS actors (
     mood TEXT NOT NULL,
     alive INTEGER NOT NULL DEFAULT 1,
     injured INTEGER NOT NULL DEFAULT 0,
+    age INTEGER NOT NULL DEFAULT 0,
+    sex TEXT NOT NULL DEFAULT '',
+    race TEXT NOT NULL DEFAULT '',
+    occupation TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
@@ -63,6 +67,7 @@ CREATE TABLE IF NOT EXISTS relationships (
     trust INTEGER NOT NULL DEFAULT 0,
     resentment INTEGER NOT NULL DEFAULT 0,
     notes TEXT NOT NULL DEFAULT '',
+    nature TEXT NOT NULL DEFAULT 'acquaintance',
     PRIMARY KEY (a, b)
 );
 
@@ -75,6 +80,15 @@ CREATE TABLE IF NOT EXISTS events (
     target_id TEXT,
     summary TEXT NOT NULL,
     payload TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS location_details (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    event_id INTEGER NOT NULL,
+    FOREIGN KEY (location_id) REFERENCES locations(id),
+    FOREIGN KEY (event_id) REFERENCES events(id)
 );
 
 CREATE TABLE IF NOT EXISTS perceptions (
@@ -166,7 +180,48 @@ class World:
         self.cx.execute(
             "CREATE TRIGGER IF NOT EXISTS perceptions_no_update BEFORE UPDATE ON perceptions BEGIN SELECT RAISE(ABORT, 'canon sealed'); END;"
         )
+        self.cx.execute(
+            "CREATE TRIGGER IF NOT EXISTS perceptions_no_delete BEFORE DELETE ON perceptions BEGIN SELECT RAISE(ABORT, 'canon sealed'); END;"
+        )
+        self.cx.execute(
+            "CREATE TRIGGER IF NOT EXISTS location_details_no_update BEFORE UPDATE ON location_details BEGIN SELECT RAISE(ABORT, 'canon sealed'); END;"
+        )
+        self.cx.execute(
+            "CREATE TRIGGER IF NOT EXISTS location_details_no_delete BEFORE DELETE ON location_details BEGIN SELECT RAISE(ABORT, 'canon sealed'); END;"
+        )
+        self._migrate()
         self.cx.commit()
+
+    def _ensure_column(self, table: str, column: str, spec: str) -> None:
+        cols = [r[1] for r in self.cx.execute(f"PRAGMA table_info({table})")]
+        if column not in cols:
+            self.cx.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
+
+    def _migrate(self) -> None:
+        """Add tables/columns that CREATE TABLE IF NOT EXISTS will not retrofit."""
+        self.cx.execute(
+            """CREATE TABLE IF NOT EXISTS location_details (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                location_id TEXT NOT NULL,
+                text TEXT NOT NULL,
+                event_id INTEGER NOT NULL,
+                FOREIGN KEY (location_id) REFERENCES locations(id),
+                FOREIGN KEY (event_id) REFERENCES events(id)
+            )"""
+        )
+        self.cx.execute(
+            "CREATE TRIGGER IF NOT EXISTS location_details_no_update BEFORE UPDATE ON location_details BEGIN SELECT RAISE(ABORT, 'canon sealed'); END;"
+        )
+        self.cx.execute(
+            "CREATE TRIGGER IF NOT EXISTS location_details_no_delete BEFORE DELETE ON location_details BEGIN SELECT RAISE(ABORT, 'canon sealed'); END;"
+        )
+        self._ensure_column("actors", "age", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("actors", "sex", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("actors", "race", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("actors", "occupation", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column(
+            "relationships", "nature", "TEXT NOT NULL DEFAULT 'acquaintance'"
+        )
 
     def close(self) -> None:
         self.cx.close()
@@ -330,8 +385,8 @@ class World:
             self.cx.execute("INSERT OR IGNORE INTO edges(a, b) VALUES(?,?)", (b, a))
         for act in scenario["actors"]:
             self.cx.execute(
-                """INSERT INTO actors(id, name, voice, want, secret, constitution, location_id, goal, mood, alive, injured)
-                   VALUES(?,?,?,?,?,?,?,?,?,1,0)""",
+                """INSERT INTO actors(id, name, voice, want, secret, constitution, location_id, goal, mood, alive, injured, age, sex, race, occupation)
+                   VALUES(?,?,?,?,?,?,?,?,?,1,0,?,?,?,?)""",
                 (
                     act["id"],
                     act["name"],
@@ -342,6 +397,10 @@ class World:
                     act["location"],
                     act.get("goal", act["want"]),
                     act.get("mood", "uneasy"),
+                    int(act.get("age") or 0),
+                    act.get("sex") or "",
+                    act.get("race") or "",
+                    act.get("occupation") or "",
                 ),
             )
         for obj in scenario.get("objects", []):
@@ -358,14 +417,25 @@ class World:
                 ),
             )
         for rel in scenario.get("relationships", []):
+            nature = rel.get("nature") or "acquaintance"
+            if nature not in (
+                "couple",
+                "kin",
+                "debt",
+                "friend",
+                "rival",
+                "acquaintance",
+            ):
+                nature = "acquaintance"
             self.cx.execute(
-                "INSERT INTO relationships(a, b, trust, resentment, notes) VALUES(?,?,?,?,?)",
+                "INSERT INTO relationships(a, b, trust, resentment, notes, nature) VALUES(?,?,?,?,?,?)",
                 (
                     rel["a"],
                     rel["b"],
                     rel.get("trust", 0),
                     rel.get("resentment", 0),
                     rel.get("notes", ""),
+                    nature,
                 ),
             )
         self.cx.commit()
@@ -510,7 +580,7 @@ class World:
         return LocationNode(
             id=loc["id"],
             name=loc["name"],
-            description=loc["description"],
+            description=self.location_prose(loc_id),
             intact=bool(loc["intact"]),
             x=float(loc["x"] or 0),
             y=float(loc["y"] or 0),
@@ -568,6 +638,44 @@ class World:
             "SELECT * FROM relationships WHERE a=? AND b=?", (a, b)
         ).fetchone()
 
+    def location_detail_texts(self, loc_id: str) -> list[str]:
+        return [
+            r["text"]
+            for r in self.cx.execute(
+                "SELECT text FROM location_details WHERE location_id=? ORDER BY id",
+                (loc_id,),
+            )
+        ]
+
+    def location_prose(self, loc_id: str) -> str:
+        loc = self.location(loc_id)
+        extra = self.location_detail_texts(loc_id)
+        bits = [loc["description"]] + [t for t in extra if t]
+        return " ".join(bits)
+
+    def append_location_detail(self, loc_id: str, text: str, event_id: int) -> None:
+        text = (text or "").strip()
+        if not text:
+            return
+        self.cx.execute(
+            "INSERT INTO location_details(location_id, text, event_id) VALUES(?,?,?)",
+            (loc_id, text[:800], event_id),
+        )
+        self.cx.commit()
+
+    def append_object_description(self, object_id: str, text: str) -> None:
+        obj = self.object(object_id)
+        if not obj:
+            return
+        extra = (text or "").strip()
+        if not extra:
+            return
+        blob = (obj["description"] + " " + extra[:400]).strip()
+        self.cx.execute(
+            "UPDATE objects SET description=? WHERE id=?", (blob, object_id)
+        )
+        self.cx.commit()
+
     def bump_relationship(
         self,
         a: str,
@@ -575,12 +683,23 @@ class World:
         trust: int = 0,
         resentment: int = 0,
         note: str | None = None,
+        nature: str | None = None,
     ) -> None:
         row = self.relationship(a, b)
         if not row:
+            kind = nature or "acquaintance"
+            if kind not in (
+                "couple",
+                "kin",
+                "debt",
+                "friend",
+                "rival",
+                "acquaintance",
+            ):
+                kind = "acquaintance"
             self.cx.execute(
-                "INSERT INTO relationships(a, b, trust, resentment, notes) VALUES(?,?,?,?,?)",
-                (a, b, trust, resentment, note or ""),
+                "INSERT INTO relationships(a, b, trust, resentment, notes, nature) VALUES(?,?,?,?,?,?)",
+                (a, b, trust, resentment, note or "", kind),
             )
         else:
             notes = row["notes"]
@@ -704,7 +823,7 @@ class World:
             locs.append({
                 "id": loc["id"],
                 "name": loc["name"],
-                "description": loc["description"],
+                "description": self.location_prose(loc["id"]),
                 "intact": bool(loc["intact"]),
                 "x": loc["x"],
                 "y": loc["y"],
@@ -726,6 +845,10 @@ class World:
                 "mood": a["mood"],
                 "alive": bool(a["alive"]),
                 "injured": bool(a["injured"]),
+                "age": int(a["age"] or 0),
+                "sex": a["sex"] or "",
+                "race": a["race"] or "",
+                "occupation": a["occupation"] or "",
                 "inventory": inv,
             })
         events = [
