@@ -3,19 +3,24 @@ set -eu
 
 export PLAYOUT_API_PORT="${PLAYOUT_API_PORT:-8765}"
 export PLAYOUT_HOST="${PLAYOUT_HOST:-127.0.0.1}"
+export PLAYOUT_WORKER="${PLAYOUT_WORKER:-external}"
 
 python -m playout &
 API_PID=$!
+python -m playout.worker &
+WORKER_PID=$!
 WEB_PID=0
 
 term() {
   if [ "$WEB_PID" -ne 0 ]; then
     kill -TERM "$WEB_PID" 2>/dev/null || true
   fi
+  kill -TERM "$WORKER_PID" 2>/dev/null || true
   kill -TERM "$API_PID" 2>/dev/null || true
   if [ "$WEB_PID" -ne 0 ]; then
     wait "$WEB_PID" 2>/dev/null || true
   fi
+  wait "$WORKER_PID" 2>/dev/null || true
   wait "$API_PID" 2>/dev/null || true
 }
 
