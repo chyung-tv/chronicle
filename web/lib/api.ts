@@ -84,6 +84,10 @@ export function postStart(storyId: string) {
   return api<StoryDetail>(`/api/stories/${storyId}/start`, { method: "POST" });
 }
 
+export function postWizard(storyId: string) {
+  return api<StoryDetail>(`/api/stories/${storyId}/wizard`, { method: "POST" });
+}
+
 export function fetchStory(ref: string) {
   return api<StoryDetail>(`/api/stories/${ref}`);
 }

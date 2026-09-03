@@ -18,8 +18,8 @@ from pydantic import BaseModel
 
 from playout.auth import DEV_USER_ID, User, can_god, get_user, is_owner
 from playout.loop import Simulation
-from playout.models import StorySetup, empty_setup
-from playout.privacy import redact_setup, redact_snapshot
+from playout.models import StorySetup, StorySketch, empty_setup, empty_sketch
+from playout.privacy import redact_setup, redact_snapshot, redact_sketch
 from playout.runtime import StoryRuntime
 from playout.store import (
     AlreadyDraft,
@@ -104,12 +104,14 @@ class StoryCreateIn(BaseModel):
     title: str | None = None
     slug: str | None = None
     setup: StorySetup | None = None
+    sketch: StorySketch | None = None
 
 
 class StoryPatchIn(BaseModel):
     title: str | None = None
     slug: str | None = None
     setup: StorySetup | None = None
+    sketch: StorySketch | None = None
 
 
 def current_user(request: Request) -> User:
@@ -167,13 +169,16 @@ def _card(rec: StoryRecord, user: User) -> dict[str, Any]:
 def _detail(rec: StoryRecord, user: User) -> dict[str, Any]:
     owner = is_owner(user, rec.owner_id)
     setup = rec.setup()
+    sketch = rec.sketch()
     if not owner:
         setup = redact_setup(setup)
+        sketch = redact_sketch(sketch)
     return {
         **_card(rec, user),
         "editable": rec.status == "draft" and owner,
         "can_god": can_god(user, rec.owner_id, rec.status),
         "setup": setup,
+        "sketch": sketch,
     }
 
 
@@ -270,10 +275,35 @@ def create_story(
 ):
     data = body or StoryCreateIn()
     setup = data.setup or empty_setup(data.title or "未名")
+    sketch = data.sketch or empty_sketch(data.title or setup.title)
     if data.title:
         setup.title = data.title
-    rec = get_store().create(user.id, setup, slug=data.slug, status="draft")
+        sketch.title = data.title
+    rec = get_store().create(
+        user.id, setup, sketch=sketch, slug=data.slug, status="draft"
+    )
     return _detail(rec, user)
+
+
+@app.post("/api/stories/{ref}/wizard")
+def wizard_story(ref: str, user: User = Depends(current_user)):
+    rec = _story(ref)
+    _require_owner(user, rec)
+    if rec.status != "draft":
+        raise HTTPException(409, "sealed")
+    from playout.llm import LLM
+    from playout.wizard import enrich
+
+    try:
+        sketch = StorySketch.model_validate(rec.sketch() or {})
+    except Exception as e:
+        raise HTTPException(400, f"invalid sketch: {e}") from e
+    setup = enrich(sketch, LLM())
+    try:
+        updated = get_store().update_setup(rec.id, setup=setup, sketch=sketch)
+    except StoreError as e:
+        _http_store(e)
+    return _detail(updated, user)
 
 
 @app.post("/api/stories/{ref}/duplicate")
@@ -296,7 +326,11 @@ def patch_story(
     _require_owner(user, rec)
     try:
         updated = get_store().update_setup(
-            rec.id, setup=body.setup, title=body.title, slug=body.slug
+            rec.id,
+            setup=body.setup,
+            sketch=body.sketch,
+            title=body.title,
+            slug=body.slug,
         )
     except StoreError as e:
         _http_store(e)

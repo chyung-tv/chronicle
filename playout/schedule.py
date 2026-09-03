@@ -7,7 +7,7 @@ from typing import Any
 
 from playout.canon import World
 
-DEFAULT_MULTIPLIER = 2
+MAX_TURNS_PER_DAY = 8
 
 
 def living_ids(world: World) -> list[str]:
@@ -15,13 +15,19 @@ def living_ids(world: World) -> list[str]:
 
 
 def plan_actor_bag(
-    actor_ids: list[str], rng: random.Random, multiplier: int = DEFAULT_MULTIPLIER
+    actor_ids: list[str],
+    rng: random.Random,
+    *,
+    lo: int | None = None,
+    hi: int | None = None,
 ) -> list[str]:
     n = len(actor_ids)
     if n == 0:
         return []
-    hi = max(n, n * max(1, multiplier))
-    length = rng.randint(n, hi)
+    lo_n = n if lo is None else max(n, lo)
+    hi_n = n if hi is None else hi
+    hi_n = max(lo_n, min(MAX_TURNS_PER_DAY, hi_n))
+    length = rng.randint(lo_n, hi_n)
     bag = list(actor_ids)
     while len(bag) < length:
         bag.append(rng.choice(actor_ids))
@@ -46,14 +52,13 @@ def insert_event_slots(
 
 def build_day_plan(
     world: World,
-    injections: list[dict[str, Any]],
+        injections: list[dict[str, Any]],
     rng: random.Random,
 ) -> dict[str, Any]:
     ids = living_ids(world)
-    multiplier = int(
-        world.meta("day_run_multiplier", str(DEFAULT_MULTIPLIER)) or DEFAULT_MULTIPLIER
-    )
-    bag = plan_actor_bag(ids, rng, multiplier)
+    lo = world.turns_per_day_min
+    hi = world.turns_per_day_max
+    bag = plan_actor_bag(ids, rng, lo=lo, hi=hi)
     actor_slots = [
         {"kind": "actor", "actor_id": aid, "status": "pending"} for aid in bag
     ]

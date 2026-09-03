@@ -97,11 +97,11 @@ export type WorldSnapshot = {
   time_label: string;
   scenes_per_day: number;
   day_plan: DayPlan | null;
-  day_run_multiplier: number;
+  turns_per_day_min: number;
+  turns_per_day_max: number;
   encounter: Encounter;
-  max_days: number;
   weather: string;
-  clock: { note?: string };
+  clock: string;
   paused: boolean;
   llm_mode: string;
   llm_model: string;
@@ -123,9 +123,46 @@ export type WorldSnapshot = {
   can_god?: boolean;
 };
 
-export type ClockSetup = {
-  storm_in_days?: number | null;
-  note?: string;
+export type LocationSketch = {
+  id: string;
+  name: string;
+  note: string;
+  x: number;
+  y: number;
+};
+
+export type ActorSketch = {
+  id: string;
+  name: string;
+  note: string;
+  location: string;
+};
+
+export type ObjectSketch = {
+  id: string;
+  name: string;
+  note: string;
+  location_id?: string | null;
+  holder_id?: string | null;
+};
+
+export type RelationshipSketch = {
+  a: string;
+  b: string;
+  note: string;
+};
+
+export type StorySketch = {
+  title: string;
+  worldview: string;
+  opening_situation: string;
+  opening_events: string;
+  turns_per_day_max: number;
+  locations: LocationSketch[];
+  edges: [string, string][];
+  actors: ActorSketch[];
+  objects: ObjectSketch[];
+  relationships: RelationshipSketch[];
 };
 
 export type LocationSetup = {
@@ -166,29 +203,18 @@ export type RelationshipSetup = {
   notes: string;
 };
 
-export type OpeningEventSetup = {
-  kind: string;
-  summary: string;
-  perceive: string[];
-  actor_id?: string | null;
-  target_id?: string | null;
-};
-
 export type StorySetup = {
   title: string;
-  days: number;
-  scenes_per_day: number;
-  day_run_multiplier: number;
-  time_labels: string[];
-  weather: string;
-  clock: ClockSetup;
+  turns_per_day_min: number;
+  turns_per_day_max: number;
   worldview: string;
+  opening_situation: string;
+  opening_events: string;
   locations: LocationSetup[];
   edges: [string, string][];
   actors: ActorSetup[];
   objects: ObjectSetup[];
   relationships: RelationshipSetup[];
-  opening_events: OpeningEventSetup[];
 };
 
 export type StoryCard = {
@@ -209,6 +235,7 @@ export type StoryDetail = StoryCard & {
   editable: boolean;
   can_god: boolean;
   setup: StorySetup;
+  sketch: StorySketch;
 };
 
 export type SessionUser = {

@@ -1,282 +1,453 @@
 {
-  "title": "港尾",
-  "days": 3,
-  "scenes_per_day": 6,
-  "day_run_multiplier": 2,
-  "time_labels": [
-    "黎明",
-    "上午",
-    "正午",
-    "午後",
-    "黃昏",
-    "夜"
-  ],
-  "weather": "天陰，海風自水上捲來，愈吹愈緊",
-  "clock": {
-    "storm_in_days": 3,
-    "note": "第三日盡頭颱風將至。林樂安欠高亦禮的債，亦在風來時到期。關瑪的舢板已失。"
-  },
-  "worldview": "這是一條冷港汊上的漁村，只有一條正街。人人曉得別人的事，卻照樣說謊。沒有警察，只有關瑪船寮的鑰匙，與高亦禮的帳本。世上無神異。暴力罕至，一至便被人記得。",
-  "locations": [
-    {
-      "id": "bakery",
-      "name": "樂安麵包舖",
-      "description": "窄店，尚存酵母與柴煙氣味。門面玻璃有裂。櫃下壓著逾期的帳。",
-      "x": 120,
-      "y": 180
-    },
-    {
-      "id": "inn",
-      "name": "鹹燈客棧",
-      "description": "鎮上唯一客棧。油燈、濕衣。高亦禮常坐的桌正對門。",
-      "x": 280,
-      "y": 140
-    },
-    {
-      "id": "quay",
-      "name": "碼頭",
-      "description": "黑水拍樁。本該繫舢板的鐵環空著。鷗鳥為無事爭吵。",
-      "x": 280,
-      "y": 280
-    },
-    {
-      "id": "boathouse",
-      "name": "關家船寮",
-      "description": "關瑪的地盤：繩、桐油、亡夫的工具。停舢板的水位是乾淨的缺。",
-      "x": 420,
-      "y": 260
-    },
-    {
-      "id": "cliff_path",
-      "name": "崖路",
-      "description": "港汊上的山羊路。礁石帶浪花。識路的人可下到隱澳。",
-      "x": 420,
-      "y": 120
-    },
-    {
-      "id": "mara_cottage",
-      "name": "關宅",
-      "description": "一間房，掃得極淨。桌上有紙。床是為一個回不來的人鋪的。",
-      "x": 120,
-      "y": 80
-    }
-  ],
-  "edges": [
-    [
-      "bakery",
-      "inn"
+  "sketch": {
+    "title": "港尾",
+    "worldview": "冷港汊漁村。人人曉得別人的事，卻照樣說謊。無警察。無神異。",
+    "opening_situation": "天陰，風緊。颱風將至。林樂安欠債到期。關瑪的舢板已失。",
+    "opening_events": "舢板自碼頭失蹤。空鐵環成了話題。賊名未叫出。",
+    "turns_per_day_max": 8,
+    "locations": [
+      {
+        "id": "bakery",
+        "name": "樂安麵包舖",
+        "note": "窄店，尚存酵母與柴煙氣味。",
+        "x": 120,
+        "y": 180
+      },
+      {
+        "id": "inn",
+        "name": "鹹燈客棧",
+        "note": "鎮上唯一客棧。",
+        "x": 280,
+        "y": 140
+      },
+      {
+        "id": "quay",
+        "name": "碼頭",
+        "note": "黑水拍樁。",
+        "x": 280,
+        "y": 280
+      },
+      {
+        "id": "boathouse",
+        "name": "關家船寮",
+        "note": "關瑪的地盤：繩、桐油、亡夫的工具。",
+        "x": 420,
+        "y": 260
+      },
+      {
+        "id": "cliff_path",
+        "name": "崖路",
+        "note": "港汊上的山羊路。",
+        "x": 420,
+        "y": 120
+      },
+      {
+        "id": "mara_cottage",
+        "name": "關宅",
+        "note": "一間房，掃得極淨。",
+        "x": 120,
+        "y": 80
+      }
     ],
-    [
-      "bakery",
-      "quay"
+    "edges": [
+      [
+        "bakery",
+        "inn"
+      ],
+      [
+        "bakery",
+        "quay"
+      ],
+      [
+        "inn",
+        "quay"
+      ],
+      [
+        "inn",
+        "mara_cottage"
+      ],
+      [
+        "quay",
+        "boathouse"
+      ],
+      [
+        "boathouse",
+        "cliff_path"
+      ],
+      [
+        "cliff_path",
+        "mara_cottage"
+      ],
+      [
+        "mara_cottage",
+        "bakery"
+      ]
     ],
-    [
-      "inn",
-      "quay"
+    "actors": [
+      {
+        "id": "lena",
+        "name": "林樂安",
+        "note": "守住父親的麵包舖。還高亦禮的債，卻不賣店。若債能了，想與張渡過安靜些的日子。",
+        "location": "bakery"
+      },
+      {
+        "id": "tomas",
+        "name": "張渡",
+        "note": "有一條自己的船，在高亦禮佔走林樂安的早晨之前，帶她離開這港汊。",
+        "location": "quay"
+      },
+      {
+        "id": "mara",
+        "name": "關瑪",
+        "note": "討回亡夫的舢板，並當眾叫出賊名。",
+        "location": "boathouse"
+      },
+      {
+        "id": "ellis",
+        "name": "高亦禮",
+        "note": "風來時若林樂安還不出，便收下面包舖。他以紙上的字計算體面。",
+        "location": "inn"
+      }
     ],
-    [
-      "inn",
-      "mara_cottage"
+    "objects": [
+      {
+        "id": "cleaver",
+        "name": "麵包舖菜刀",
+        "note": "沉、利，掛在爐邊。林樂安用來砍骨髓。",
+        "location_id": "bakery",
+        "holder_id": null
+      },
+      {
+        "id": "ledger",
+        "name": "欠債帳本",
+        "note": "高亦禮所抄林樂安的債，風來即到期。末行已用更深的墨寫好：舖面。",
+        "location_id": "inn",
+        "holder_id": null
+      },
+      {
+        "id": "affair_letter",
+        "name": "關瑪的信",
+        "note": "關瑪親筆：兩日前夜半，林樂安與張渡在碼頭。她點了名。尚未寄出。",
+        "location_id": "mara_cottage",
+        "holder_id": null
+      },
+      {
+        "id": "stolen_skiff",
+        "name": "失蹤的舢板",
+        "note": "關瑪亡夫的船，蹭在崖下。張渡的圍巾掛在系纜樁上。",
+        "location_id": "cliff_path",
+        "holder_id": null
+      }
     ],
-    [
-      "quay",
-      "boathouse"
-    ],
-    [
-      "boathouse",
-      "cliff_path"
-    ],
-    [
-      "cliff_path",
-      "mara_cottage"
-    ],
-    [
-      "mara_cottage",
-      "bakery"
+    "relationships": [
+      {
+        "a": "lena",
+        "b": "tomas",
+        "note": "私情；她以為他會幫她還債"
+      },
+      {
+        "a": "tomas",
+        "b": "lena",
+        "note": "想帶她走；尚未告知舢板一事"
+      },
+      {
+        "a": "lena",
+        "b": "ellis",
+        "note": "他握著債"
+      },
+      {
+        "a": "ellis",
+        "b": "lena",
+        "note": "有用的抵押"
+      },
+      {
+        "a": "lena",
+        "b": "mara",
+        "note": "幾乎是親人；林樂安在騙她"
+      },
+      {
+        "a": "mara",
+        "b": "lena",
+        "note": "疼惜已被信裡的字帶酸"
+      },
+      {
+        "a": "mara",
+        "b": "tomas",
+        "note": "疑他偷船"
+      },
+      {
+        "a": "tomas",
+        "b": "mara",
+        "note": "怕她的眼睛"
+      },
+      {
+        "a": "tomas",
+        "b": "ellis",
+        "note": "壞交易，尚未破"
+      },
+      {
+        "a": "ellis",
+        "b": "tomas",
+        "note": "用完可棄的手"
+      },
+      {
+        "a": "mara",
+        "b": "ellis",
+        "note": "不喜碼頭上的放債人"
+      },
+      {
+        "a": "ellis",
+        "b": "mara",
+        "note": "她不便宜"
+      }
     ]
-  ],
-  "actors": [
-    {
-      "id": "lena",
-      "name": "林樂安",
-      "location": "bakery",
-      "voice": "輕而準，像一邊數錢一邊說話。她極少提高聲音；一旦提高，便已來不及。",
-      "want": "守住父親的麵包舖。還高亦禮的債，卻不賣店。若債能了，想與張渡過安靜些的日子。",
-      "secret": "打烊後與張渡私會，已三個月。未曾告訴關瑪——關瑪待她幾乎如姪女。",
-      "constitution": "對舖子、對所愛的人太忠，有時過了分寸。恨被逼到牆角。為了讓一間屋子立著，她肯說謊。她不是慣於殺人的人——可若有人奪她的東西，她有脾氣。",
-      "goal": "趕在風來前，想辦法還高亦禮。",
-      "mood": "緊"
-    },
-    {
-      "id": "tomas",
-      "name": "張渡",
-      "location": "quay",
-      "voice": "漁人的沙啞裡帶著好說話。笑話在先，真話晚到，若肯到的話。",
-      "want": "有一條自己的船，在高亦禮佔走林樂安的早晨之前，帶她離開這港汊。",
-      "secret": "昨夜偷了關瑪的舢板，藏在崖路下的澳裡。是高亦禮教的：賣掉分錢。",
-      "constitution": "莽，親熱，極怕被捉。他低估小鎮能把秘密藏多久。他會逃，不會先認。",
-      "goal": "把舢板藏到能賣或能走。",
-      "mood": "躁"
-    },
-    {
-      "id": "mara",
-      "name": "關瑪",
-      "location": "boathouse",
-      "voice": "乾、短，碼頭管事的口氣。她把事物叫準。",
-      "want": "討回亡夫的舢板，並當眾叫出賊名。",
-      "secret": "她已疑張渡。宅中有一封未示人的信：前夜她見林樂安與張渡從碼頭離開，寫下來，免得哀傷把字磨平。",
-      "constitution": "傲，準，恕得慢。她愛過丈夫，也愛他造的船。她不為好玩而殘忍，卻不容人當她是傻子。",
-      "goal": "風未毀線索之前，查出誰帶走舢板。",
-      "mood": "冷"
-    },
-    {
-      "id": "ellis",
-      "name": "高亦禮",
-      "location": "inn",
-      "voice": "像合上的帳本那樣客氣。他用嘴笑。收債從不趕。",
-      "want": "風來時若林樂安還不出，便收下面包舖。他以紙上的字計算體面。",
-      "secret": "是他教張渡去偷關瑪的舢板。他要留下錢，仍去催林樂安的債。若有人問，他會否認。",
-      "constitution": "有耐性的食肉者。寧要簽名，不要瘀青。計畫一滑，便忽然變得私人。",
-      "goal": "讓林樂安一直怕，讓張渡一直有用，直到債期。",
-      "mood": "愜"
-    }
-  ],
-  "objects": [
-    {
-      "id": "cleaver",
-      "name": "麵包舖菜刀",
-      "description": "沉、利，掛在爐邊。林樂安用來砍骨髓。",
-      "location_id": "bakery",
-      "hidden": false
-    },
-    {
-      "id": "ledger",
-      "name": "欠債帳本",
-      "description": "高亦禮所抄林樂安的債，風來即到期。末行已用更深的墨寫好：舖面。",
-      "location_id": "inn",
-      "hidden": false
-    },
-    {
-      "id": "affair_letter",
-      "name": "關瑪的信",
-      "description": "關瑪親筆：兩日前夜半，林樂安與張渡在碼頭。她點了名。尚未寄出。",
-      "location_id": "mara_cottage",
-      "hidden": true
-    },
-    {
-      "id": "stolen_skiff",
-      "name": "失蹤的舢板",
-      "description": "關瑪亡夫的船，蹭在崖下。張渡的圍巾掛在系纜樁上。",
-      "location_id": "cliff_path",
-      "hidden": true
-    }
-  ],
-  "relationships": [
-    {
-      "a": "lena",
-      "b": "tomas",
-      "trust": 7,
-      "resentment": 1,
-      "notes": "私情；她以為他會幫她還債"
-    },
-    {
-      "a": "tomas",
-      "b": "lena",
-      "trust": 6,
-      "resentment": 0,
-      "notes": "想帶她走；尚未告知舢板一事"
-    },
-    {
-      "a": "lena",
-      "b": "ellis",
-      "trust": -3,
-      "resentment": 6,
-      "notes": "他握著債"
-    },
-    {
-      "a": "ellis",
-      "b": "lena",
-      "trust": 1,
-      "resentment": 0,
-      "notes": "有用的抵押"
-    },
-    {
-      "a": "lena",
-      "b": "mara",
-      "trust": 5,
-      "resentment": 0,
-      "notes": "幾乎是親人；林樂安在騙她"
-    },
-    {
-      "a": "mara",
-      "b": "lena",
-      "trust": 2,
-      "resentment": 3,
-      "notes": "疼惜已被信裡的字帶酸"
-    },
-    {
-      "a": "mara",
-      "b": "tomas",
-      "trust": -2,
-      "resentment": 5,
-      "notes": "疑他偷船"
-    },
-    {
-      "a": "tomas",
-      "b": "mara",
-      "trust": 0,
-      "resentment": 2,
-      "notes": "怕她的眼睛"
-    },
-    {
-      "a": "tomas",
-      "b": "ellis",
-      "trust": 1,
-      "resentment": 2,
-      "notes": "壞交易，尚未破"
-    },
-    {
-      "a": "ellis",
-      "b": "tomas",
-      "trust": -1,
-      "resentment": 0,
-      "notes": "用完可棄的手"
-    },
-    {
-      "a": "mara",
-      "b": "ellis",
-      "trust": -1,
-      "resentment": 2,
-      "notes": "不喜碼頭上的放債人"
-    },
-    {
-      "a": "ellis",
-      "b": "mara",
-      "trust": 0,
-      "resentment": 1,
-      "notes": "她不便宜"
-    }
-  ],
-  "opening_events": [
-    {
-      "kind": "world",
-      "summary": "關瑪的舢板已自碼頭失蹤。颱風三日後至。林樂安欠高亦禮的債，亦在風來時到期。",
-      "perceive": [
-        "lena",
-        "tomas",
-        "mara",
-        "ellis"
+  },
+  "setup": {
+    "title": "港尾",
+    "turns_per_day_min": 4,
+    "turns_per_day_max": 8,
+    "worldview": "這是一條冷港汊上的漁村，只有一條正街。人人曉得別人的事，卻照樣說謊。沒有警察，只有關瑪船寮的鑰匙，與高亦禮的帳本。世上無神異。暴力罕至，一至便被人記得。",
+    "opening_situation": "天陰，海風自水上捲來，愈吹愈緊。第三日盡頭颱風將至。林樂安欠高亦禮的債，亦在風來時到期。關瑪的舢板已失。",
+    "opening_events": "關瑪的舢板已自碼頭失蹤。颱風三日後至。林樂安欠高亦禮的債，亦在風來時到期。 樁上的空鐵環已成鎮上的話題。賊名尚未有人叫出。",
+    "locations": [
+      {
+        "id": "bakery",
+        "name": "樂安麵包舖",
+        "description": "窄店，尚存酵母與柴煙氣味。門面玻璃有裂。櫃下壓著逾期的帳。",
+        "x": 120,
+        "y": 180
+      },
+      {
+        "id": "inn",
+        "name": "鹹燈客棧",
+        "description": "鎮上唯一客棧。油燈、濕衣。高亦禮常坐的桌正對門。",
+        "x": 280,
+        "y": 140
+      },
+      {
+        "id": "quay",
+        "name": "碼頭",
+        "description": "黑水拍樁。本該繫舢板的鐵環空著。鷗鳥為無事爭吵。",
+        "x": 280,
+        "y": 280
+      },
+      {
+        "id": "boathouse",
+        "name": "關家船寮",
+        "description": "關瑪的地盤：繩、桐油、亡夫的工具。停舢板的水位是乾淨的缺。",
+        "x": 420,
+        "y": 260
+      },
+      {
+        "id": "cliff_path",
+        "name": "崖路",
+        "description": "港汊上的山羊路。礁石帶浪花。識路的人可下到隱澳。",
+        "x": 420,
+        "y": 120
+      },
+      {
+        "id": "mara_cottage",
+        "name": "關宅",
+        "description": "一間房，掃得極淨。桌上有紙。床是為一個回不來的人鋪的。",
+        "x": 120,
+        "y": 80
+      }
+    ],
+    "edges": [
+      [
+        "bakery",
+        "inn"
+      ],
+      [
+        "bakery",
+        "quay"
+      ],
+      [
+        "inn",
+        "quay"
+      ],
+      [
+        "inn",
+        "mara_cottage"
+      ],
+      [
+        "quay",
+        "boathouse"
+      ],
+      [
+        "boathouse",
+        "cliff_path"
+      ],
+      [
+        "cliff_path",
+        "mara_cottage"
+      ],
+      [
+        "mara_cottage",
+        "bakery"
       ]
-    },
-    {
-      "kind": "world",
-      "summary": "樁上的空鐵環已成鎮上的話題。賊名尚未有人叫出。",
-      "perceive": [
-        "lena",
-        "tomas",
-        "mara",
-        "ellis"
-      ]
-    }
-  ]
+    ],
+    "actors": [
+      {
+        "id": "lena",
+        "name": "林樂安",
+        "location": "bakery",
+        "voice": "輕而準，像一邊數錢一邊說話。她極少提高聲音；一旦提高，便已來不及。",
+        "want": "守住父親的麵包舖。還高亦禮的債，卻不賣店。若債能了，想與張渡過安靜些的日子。",
+        "secret": "打烊後與張渡私會，已三個月。未曾告訴關瑪——關瑪待她幾乎如姪女。",
+        "constitution": "對舖子、對所愛的人太忠，有時過了分寸。恨被逼到牆角。為了讓一間屋子立著，她肯說謊。她不是慣於殺人的人——可若有人奪她的東西，她有脾氣。",
+        "goal": "趕在風來前，想辦法還高亦禮。",
+        "mood": "緊"
+      },
+      {
+        "id": "tomas",
+        "name": "張渡",
+        "location": "quay",
+        "voice": "漁人的沙啞裡帶著好說話。笑話在先，真話晚到，若肯到的話。",
+        "want": "有一條自己的船，在高亦禮佔走林樂安的早晨之前，帶她離開這港汊。",
+        "secret": "昨夜偷了關瑪的舢板，藏在崖路下的澳裡。是高亦禮教的：賣掉分錢。",
+        "constitution": "莽，親熱，極怕被捉。他低估小鎮能把秘密藏多久。他會逃，不會先認。",
+        "goal": "把舢板藏到能賣或能走。",
+        "mood": "躁"
+      },
+      {
+        "id": "mara",
+        "name": "關瑪",
+        "location": "boathouse",
+        "voice": "乾、短，碼頭管事的口氣。她把事物叫準。",
+        "want": "討回亡夫的舢板，並當眾叫出賊名。",
+        "secret": "她已疑張渡。宅中有一封未示人的信：前夜她見林樂安與張渡從碼頭離開，寫下來，免得哀傷把字磨平。",
+        "constitution": "傲，準，恕得慢。她愛過丈夫，也愛他造的船。她不為好玩而殘忍，卻不容人當她是傻子。",
+        "goal": "風未毀線索之前，查出誰帶走舢板。",
+        "mood": "冷"
+      },
+      {
+        "id": "ellis",
+        "name": "高亦禮",
+        "location": "inn",
+        "voice": "像合上的帳本那樣客氣。他用嘴笑。收債從不趕。",
+        "want": "風來時若林樂安還不出，便收下面包舖。他以紙上的字計算體面。",
+        "secret": "是他教張渡去偷關瑪的舢板。他要留下錢，仍去催林樂安的債。若有人問，他會否認。",
+        "constitution": "有耐性的食肉者。寧要簽名，不要瘀青。計畫一滑，便忽然變得私人。",
+        "goal": "讓林樂安一直怕，讓張渡一直有用，直到債期。",
+        "mood": "愜"
+      }
+    ],
+    "objects": [
+      {
+        "id": "cleaver",
+        "name": "麵包舖菜刀",
+        "description": "沉、利，掛在爐邊。林樂安用來砍骨髓。",
+        "location_id": "bakery",
+        "hidden": false
+      },
+      {
+        "id": "ledger",
+        "name": "欠債帳本",
+        "description": "高亦禮所抄林樂安的債，風來即到期。末行已用更深的墨寫好：舖面。",
+        "location_id": "inn",
+        "hidden": false
+      },
+      {
+        "id": "affair_letter",
+        "name": "關瑪的信",
+        "description": "關瑪親筆：兩日前夜半，林樂安與張渡在碼頭。她點了名。尚未寄出。",
+        "location_id": "mara_cottage",
+        "hidden": true
+      },
+      {
+        "id": "stolen_skiff",
+        "name": "失蹤的舢板",
+        "description": "關瑪亡夫的船，蹭在崖下。張渡的圍巾掛在系纜樁上。",
+        "location_id": "cliff_path",
+        "hidden": true
+      }
+    ],
+    "relationships": [
+      {
+        "a": "lena",
+        "b": "tomas",
+        "trust": 7,
+        "resentment": 1,
+        "notes": "私情；她以為他會幫她還債"
+      },
+      {
+        "a": "tomas",
+        "b": "lena",
+        "trust": 6,
+        "resentment": 0,
+        "notes": "想帶她走；尚未告知舢板一事"
+      },
+      {
+        "a": "lena",
+        "b": "ellis",
+        "trust": -3,
+        "resentment": 6,
+        "notes": "他握著債"
+      },
+      {
+        "a": "ellis",
+        "b": "lena",
+        "trust": 1,
+        "resentment": 0,
+        "notes": "有用的抵押"
+      },
+      {
+        "a": "lena",
+        "b": "mara",
+        "trust": 5,
+        "resentment": 0,
+        "notes": "幾乎是親人；林樂安在騙她"
+      },
+      {
+        "a": "mara",
+        "b": "lena",
+        "trust": 2,
+        "resentment": 3,
+        "notes": "疼惜已被信裡的字帶酸"
+      },
+      {
+        "a": "mara",
+        "b": "tomas",
+        "trust": -2,
+        "resentment": 5,
+        "notes": "疑他偷船"
+      },
+      {
+        "a": "tomas",
+        "b": "mara",
+        "trust": 0,
+        "resentment": 2,
+        "notes": "怕她的眼睛"
+      },
+      {
+        "a": "tomas",
+        "b": "ellis",
+        "trust": 1,
+        "resentment": 2,
+        "notes": "壞交易，尚未破"
+      },
+      {
+        "a": "ellis",
+        "b": "tomas",
+        "trust": -1,
+        "resentment": 0,
+        "notes": "用完可棄的手"
+      },
+      {
+        "a": "mara",
+        "b": "ellis",
+        "trust": -1,
+        "resentment": 2,
+        "notes": "不喜碼頭上的放債人"
+      },
+      {
+        "a": "ellis",
+        "b": "mara",
+        "trust": 0,
+        "resentment": 1,
+        "notes": "她不便宜"
+      }
+    ]
+  }
 }

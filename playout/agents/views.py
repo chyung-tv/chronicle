@@ -138,7 +138,7 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
     walkable = [e.id for e in loc.connected if e.intact]
     return f"""世界：{w.title}。{w.worldview}
 時辰：{w.beat}。天色：{w.weather}。
-期限：{w.clock}
+開局：{w.clock}
 
 你是：{a.name}（{a.id}）
 口吻：{a.voice}

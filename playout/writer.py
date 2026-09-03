@@ -161,7 +161,7 @@ def write_day(world: World, llm: LLM, day: int) -> dict[str, Any]:
             f"第{day}日事件帶（正史）：\n{pack['tape']}\n"
             f"人物：{actors}\n"
             f"地點（可渲染的環境）：{pack['locations']}\n"
-            f"天色：{pack['weather']}\n期限：{pack['clock']}"
+            f"天色：{pack['weather']}\n開局：{pack['clock']}"
         )
         data = llm.complete_json(WRITER_SYSTEM, user, strong=True)
         try:

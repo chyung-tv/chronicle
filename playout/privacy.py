@@ -18,6 +18,13 @@ def redact_setup(setup: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def redact_sketch(sketch: dict[str, Any]) -> dict[str, Any]:
+    out = deepcopy(sketch)
+    for act in out.get("actors") or []:
+        act["note"] = ""
+    return out
+
+
 def redact_snapshot(snap: dict[str, Any]) -> dict[str, Any]:
     out = deepcopy(snap)
     for act in out.get("actors") or []:

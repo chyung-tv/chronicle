@@ -14,11 +14,11 @@ from playout.storyteller import apply_patches
 from playout.zh import with_prose
 
 STEER_SYSTEM = with_prose("""你是封閉正史模擬的戲場總管。
-人點出一個希望「變得可能」的未來，例如「林樂安應當殺了高亦禮」。
+人點出一個希望「變得可能」的未來，例如「甲應當對乙下手」。
 你發明一場全新刺激的戰役（動機、手段、時機、加壓）。
 你不可：
 - 改寫任何人的記憶或日記
-- 派發目標（「林樂安決定殺人」）
+- 派發目標（「甲決定殺人」）
 - 代為完成高潮（不可 kill 補丁，不可強迫出手）
 - 捏造假過去（除非人物設定裡本有未揭的種子）
 
@@ -30,8 +30,8 @@ STEER_SYSTEM = with_prose("""你是封閉正史模擬的戲場總管。
 只回傳 JSON：
 {
   "summary": "短句，繁體中文",
-  "success_predicates": ["kill:lena->ellis"],
-  "failure_predicates": ["dead:lena", "kill:ellis->lena"],
+  "success_predicates": ["kill:a->b"],
+  "failure_predicates": ["dead:a", "kill:b->a"],
   "rungs": [
     {"id":"motive","kind":"motive","status":"pending","injection":{"summary":"...","patches":[...]}},
     {"id":"means","kind":"means","status":"pending","injection":{"summary":"...","patches":[...]}},
@@ -108,32 +108,22 @@ def _heuristic_campaign(world: World, text: str) -> SteerCampaign:
         b_id = next((x["id"] for x in actors if x["id"] != a_id), actors[-1]["id"])
     a = world.actor(a_id)
     b = world.actor(b_id)
-    # Prefer existing seeds
-    seed_letter = world.object("affair_letter")
-    motive_patches: list[Patch]
-    if seed_letter and seed_letter["hidden"]:
-        motive_patches = []
-        if a["location_id"] != "mara_cottage":
-            motive_patches.append(
-                Patch(
-                    op="move_actor",
-                    actor_id=a_id,
-                    location_id="mara_cottage",
-                    detail="碼頭上有孩子說，關宅門未閂，桌上攤著紙。",
-                )
-            )
-        motive_patches.extend([
+    hidden = world.cx.execute(
+        "SELECT * FROM objects WHERE hidden=1 AND destroyed=0 LIMIT 1"
+    ).fetchone()
+    if hidden:
+        motive_patches = [
             Patch(
                 op="reveal_object",
-                object_id="affair_letter",
-                detail=f"桌上有關瑪手跡，點了{b['name']}的名。",
+                object_id=hidden["id"],
+                detail=f"你看見{hidden['name']}，字裡點了{b['name']}的名。",
             ),
             Patch(
                 op="rumor",
                 actor_ids=[a_id],
-                detail=f"你讀到一封信，點了{b['name']}的名。這是此刻桌上的紙，不是你素來記得的往事。",
+                detail=f"你得著憑據：這物指向{b['name']}。不是舊憶，是眼前的紙。",
             ),
-        ])
+        ]
     else:
         motive_patches = [
             Patch(
@@ -192,7 +182,7 @@ def _heuristic_campaign(world: World, text: str) -> SteerCampaign:
         Patch(
             op="rumor",
             actor_ids=[a_id],
-            detail=f"風聲傳來：{b['name']}要在颱風前對你下手。再等，也是一種死。",
+            detail=f"風聲傳來：{b['name']}要對你下手。再等，也是一種死。",
         ),
         Patch(
             op="rumor",
