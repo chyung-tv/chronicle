@@ -21,8 +21,19 @@ term() {
 
 trap term INT TERM
 
-# Next listens on Railway's PORT; FastAPI stays on PLAYOUT_API_PORT inside the container.
-node /web/node_modules/next/dist/bin/next start -H 0.0.0.0 -p "${PORT:-3000}" &
+# Wait until FastAPI is accepting connections so /api/health can pass.
+i=0
+while [ "$i" -lt 60 ]; do
+  if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${PLAYOUT_API_PORT}/api/health', timeout=1)" 2>/dev/null; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 0.5
+done
+
+# Next looks for .next in cwd; the image keeps the built app under /web.
+cd /web
+node node_modules/next/dist/bin/next start -H 0.0.0.0 -p "${PORT:-3000}" &
 WEB_PID=$!
 wait "$WEB_PID"
 status=$?
