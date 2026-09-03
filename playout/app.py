@@ -361,6 +361,29 @@ def reset_story(ref: str, user: User = Depends(current_user)):
     return _detail(updated, user)
 
 
+@app.post("/api/stories/{ref}/unstick")
+def unstick_story(ref: str, user: User = Depends(current_user)):
+    """Clear a stuck activity=thinking after a worker crash or timeout."""
+    from playout import jobs as jobmod
+    from playout.canon import World
+
+    rec = _story(ref)
+    _require_owner(user, rec)
+    if rec.status != "live":
+        raise HTTPException(409, "not live")
+    st = get_store()
+    jobmod.expire_stale(st)
+    if jobmod.story_busy(st, rec.id):
+        raise HTTPException(409, "busy")
+    if st.canon_exists(rec.id):
+        world = World(st.canon_ref(rec.id), database_url=st.database_url)
+        try:
+            world.set_activity("idle")
+        finally:
+            world.close()
+    return _detail(_story(rec.id), user)
+
+
 @app.get("/api/stories/{ref}/state")
 def story_state(ref: str, user: User = Depends(current_user)):
     rec = _story(ref)

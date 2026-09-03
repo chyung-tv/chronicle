@@ -154,6 +154,25 @@ def _unique_violation(exc: BaseException) -> bool:
     return "unique" in msg or "jobs_one_active" in msg
 
 
+def _clear_canon_activity(store: StoryStore, story_id: str) -> None:
+    """Reset a stuck activity=thinking in the story's canon world after a job dies."""
+    try:
+        from playout.canon import World
+
+        ref = store.canon_ref(story_id)
+        if not store.canon_exists(story_id):
+            return
+        world = World(ref, database_url=store.database_url)
+        try:
+            current = world.meta("activity") or ""
+            if current != "idle":
+                world.set_activity("idle", error="worker heartbeat lost")
+        finally:
+            world.close()
+    except Exception:
+        pass
+
+
 def _notify(store: StoryStore, job_id: str) -> None:
     if not store.database_url:
         return
@@ -320,21 +339,26 @@ def finish(
 def expire_stale(store: StoryStore) -> None:
     cutoff = datetime.now(timezone.utc) - STALE_AFTER
     rows = list(
-        store.cx.execute("SELECT id, heartbeat_at FROM jobs WHERE status='running'")
+        store.cx.execute(
+            "SELECT id, story_id, heartbeat_at FROM jobs WHERE status='running'"
+        )
     )
     stale = []
     for r in rows:
         hb = _parse_ts(r["heartbeat_at"])
         if hb is None or hb < cutoff:
-            stale.append(r["id"])
-    for job_id in stale:
+            stale.append({"id": r["id"], "story_id": r["story_id"]})
+    for job in stale:
         store.cx.execute(
             """UPDATE jobs SET status='error', error=?, finished_at=?, gen=gen+1
                WHERE id=? AND status='running'""",
-            ("worker heartbeat lost", _now(), job_id),
+            ("worker heartbeat lost", _now(), job["id"]),
         )
     if stale:
         store.cx.commit()
+        # Best-effort: reset the world's activity so the UI unlocks.
+        for job in stale:
+            _clear_canon_activity(store, job["story_id"])
 
 
 def claim_one(store: StoryStore, worker_id: str) -> dict[str, Any] | None:
