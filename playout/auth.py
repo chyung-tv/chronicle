@@ -32,8 +32,6 @@ def get_user(request: Request | None = None) -> User:
         name = (request.headers.get("X-User-Name") or "").strip()
         if not uid:
             uid = (request.cookies.get("playout_user") or "").strip()
-        if not name:
-            name = (request.cookies.get("playout_name") or "").strip()
     if not uid:
         uid = DEV_USER_ID
         name = name or DEV_USER_NAME

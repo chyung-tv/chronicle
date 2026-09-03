@@ -28,7 +28,15 @@ def test_harbors_end_setup_validates():
     assert len(setup.actors) == 4
 
 
-def test_seed_harbors_as_live(tmp_path, monkeypatch):
+def test_me_returns_dev_user(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as client:
+        r = client.get("/api/me")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["id"] == "dev-owner"
+        assert body["name"]
+        assert "playout_user=" in r.headers.get("set-cookie", "")
+    appmod.close_runtime()
     with _client(tmp_path, monkeypatch) as client:
         stories = client.get("/api/stories").json()
         assert len(stories) == 1

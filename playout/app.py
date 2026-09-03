@@ -236,8 +236,8 @@ def index():
 @app.get("/api/me")
 def me(user: User = Depends(current_user)):
     resp = JSONResponse({"id": user.id, "name": user.name})
+    # Cookie values must be latin-1; keep the id (ASCII). Name lives on the JSON body.
     resp.set_cookie("playout_user", user.id, httponly=False, samesite="lax", path="/")
-    resp.set_cookie("playout_name", user.name, httponly=False, samesite="lax", path="/")
     return resp
 
 
