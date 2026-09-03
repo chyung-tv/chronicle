@@ -37,9 +37,13 @@ Auth is stubbed (`X-User-Id` / cookie / `PLAYOUT_DEV_USER_ID`, default `dev-owne
 
 ## Catalog and files
 
-- `catalog.db` — story rows (`PLAYOUT_CATALOG` to override)
-- `data/stories/{id}.db` — sealed canon per story (`PLAYOUT_STORIES_DIR`)
+- `catalog.db` — story rows (`PLAYOUT_CATALOG` to override). On Railway, the catalog is a Postgres table instead (`DATABASE_URL` from the Postgres plugin).
+- `data/stories/{id}.db` — sealed canon per story (`PLAYOUT_STORIES_DIR`). On Railway each story is a Postgres schema `story_<id>`.
 - `scenarios/harbors_end.json` — seed for 港尾
+
+## Railway
+
+The Dockerfile runs FastAPI on `127.0.0.1:8765` and Next.js on `$PORT`. Set `DATABASE_URL` to `${{Postgres.DATABASE_URL}}` on the `chronicle` service. Optional: `OPENROUTER_API_KEY` for live models.
 
 ## How it works
 

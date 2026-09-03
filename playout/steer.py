@@ -6,6 +6,7 @@ import json
 import re
 from typing import Any
 
+from playout import sql as dbsql
 from playout.canon import World
 from playout.llm import LLM
 from playout.models import Patch, SteerCampaign, SteerRung, StorytellerPlan
@@ -306,13 +307,14 @@ def submit_intent(world: World, llm: LLM, text: str) -> dict[str, Any]:
     else:
         campaign = _heuristic_campaign(world, text)
     campaign = _forbidden_ops(campaign)
-    cur = world.cx.execute(
+    intent_id = dbsql.insert_returning_id(
+        world.cx,
         "INSERT INTO steer_intents(text, status, campaign, created_day, created_scene) VALUES(?,?,?,?,?)",
         (text, "brewing", campaign.model_dump_json(), world.day, world.scene),
     )
     world.cx.commit()
     return {
-        "id": int(cur.lastrowid),
+        "id": intent_id,
         "status": "brewing",
         "campaign": campaign.model_dump(),
     }

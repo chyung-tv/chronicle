@@ -1,4 +1,4 @@
-"""Story catalog. Separate from sealed canon SQLite files.
+"""Story catalog. Separate from sealed canon (SQLite files or Postgres schemas).
 
 unseal() is temporary scaffolding: drop canon, return the row to draft so
 the owner can edit setup again. Remove this method (and its HTTP route)
@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from playout import sql as dbsql
 from playout.canon import World, unlink_db, world_from_setup
 from playout.models import StorySetup, StorySketch, empty_setup, empty_sketch, parse_story_pack, sketch_from_setup
 from playout.wizard import stitch
@@ -102,7 +103,7 @@ def _slugify(title: str) -> str:
     return text
 
 
-def _row(r: sqlite3.Row) -> StoryRecord:
+def _row(r: Any) -> StoryRecord:
     keys = set(r.keys())
     sketch = r["sketch_json"] if "sketch_json" in keys else "{}"
     return StoryRecord(
@@ -119,12 +120,37 @@ def _row(r: sqlite3.Row) -> StoryRecord:
 
 
 class StoryStore:
-    def __init__(self, catalog_path: str | Path, stories_dir: str | Path):
+    def __init__(
+        self,
+        catalog_path: str | Path,
+        stories_dir: str | Path,
+        *,
+        database_url: str | None = None,
+    ):
         self.catalog_path = Path(catalog_path)
         self.stories_dir = Path(stories_dir)
+        self.database_url = database_url
+        self._lock = threading.RLock()
+        if self.database_url:
+            self.cx = dbsql.connect_postgres(
+                schema="public", url=self.database_url
+            )
+            self.cx.execute(CATALOG_SCHEMA)
+            cols = {
+                row["column_name"]
+                for row in self.cx.execute(
+                    """SELECT column_name FROM information_schema.columns
+                       WHERE table_schema='public' AND table_name='stories'"""
+                )
+            }
+            if "sketch_json" not in cols:
+                self.cx.execute(
+                    "ALTER TABLE stories ADD COLUMN sketch_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            self.cx.commit()
+            return
         self.catalog_path.parent.mkdir(parents=True, exist_ok=True)
         self.stories_dir.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.RLock()
         self.cx = sqlite3.connect(
             str(self.catalog_path), check_same_thread=False, timeout=5.0
         )
@@ -142,6 +168,16 @@ class StoryStore:
 
     def canon_path(self, story_id: str) -> Path:
         return self.stories_dir / f"{story_id}.db"
+
+    def canon_ref(self, story_id: str) -> str:
+        if self.database_url:
+            return dbsql.story_source(story_id)
+        return str(self.canon_path(story_id))
+
+    def canon_exists(self, story_id: str) -> bool:
+        if self.database_url:
+            return dbsql.schema_exists(story_id, url=self.database_url)
+        return self.canon_path(story_id).exists()
 
     def get(self, ref: str) -> StoryRecord | None:
         row = self.cx.execute(
@@ -307,7 +343,7 @@ class StoryStore:
             rec = self.require(ref)
             if rec.status != "live":
                 raise AlreadyDraft("already draft")
-            unlink_db(self.canon_path(rec.id))
+            unlink_db(self.canon_ref(rec.id), database_url=self.database_url)
             self.cx.execute(
                 "UPDATE stories SET status=?, updated_at=? WHERE id=?",
                 ("draft", _now(), rec.id),
@@ -318,10 +354,13 @@ class StoryStore:
     def peek_day(self, rec: StoryRecord) -> int | None:
         if rec.status != "live":
             return None
-        path = self.canon_path(rec.id)
-        if not path.exists():
+        if not self.canon_exists(rec.id):
             return None
-        world = World(path, readonly=True)
+        world = World(
+            self.canon_ref(rec.id),
+            readonly=True,
+            database_url=self.database_url,
+        )
         try:
             return world.day
         except Exception:
@@ -341,7 +380,9 @@ class StoryStore:
             owner_id, setup, sketch=sketch, slug="harbors-end", status="draft"
         )
         world = world_from_setup(
-            self.canon_path(rec.id), setup.model_dump(mode="json")
+            self.canon_ref(rec.id),
+            setup.model_dump(mode="json"),
+            database_url=self.database_url,
         )
         world.close()
         return self.mark_live(rec.id)

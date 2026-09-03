@@ -207,8 +207,15 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
         slug = re.sub(r"[^a-z0-9]+", "_", action.text.lower())[:24] or "zh"
         oid = f"note_{actor_id}_{world.day}_{world.scene}_{slug}"[:60]
         world.cx.execute(
-            """INSERT OR REPLACE INTO objects(id, name, description, location_id, holder_id, hidden, destroyed)
-               VALUES(?,?,?,?,?,0,0)""",
+            """INSERT INTO objects(id, name, description, location_id, holder_id, hidden, destroyed)
+               VALUES(?,?,?,?,?,0,0)
+               ON CONFLICT(id) DO UPDATE SET
+                 name=excluded.name,
+                 description=excluded.description,
+                 location_id=excluded.location_id,
+                 holder_id=excluded.holder_id,
+                 hidden=0,
+                 destroyed=0""",
             (oid, "紙條", action.text[:500], None, actor_id),
         )
         world.cx.commit()
