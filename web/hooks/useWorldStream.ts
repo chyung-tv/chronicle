@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchState } from "@/lib/api";
-import { persistUser, userHeaders } from "@/lib/auth";
+import { persistUser, userHeaders, getCurrentUser } from "@/lib/auth";
 import type { WorldSnapshot } from "@/lib/types";
 
 export function useWorldStream(storyId: string | null) {
@@ -22,7 +22,7 @@ export function useWorldStream(storyId: string | null) {
     try {
       persistUser({
         id: userHeaders()["X-User-Id"],
-        name: userHeaders()["X-User-Name"],
+        name: getCurrentUser().name,
       });
       const data = await fetchState(storyId);
       setNotLive(false);
@@ -46,7 +46,7 @@ export function useWorldStream(storyId: string | null) {
 
     persistUser({
       id: userHeaders()["X-User-Id"],
-      name: userHeaders()["X-User-Name"],
+      name: getCurrentUser().name,
     });
 
     const connect = () => {

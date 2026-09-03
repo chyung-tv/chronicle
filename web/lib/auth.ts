@@ -37,5 +37,6 @@ export function persistUser(user: SessionUser) {
 
 export function userHeaders(): Record<string, string> {
   const u = getCurrentUser();
-  return { "X-User-Id": u.id, "X-User-Name": u.name };
+  // Fetch forbids non-ISO-8859-1 header values; id stays ASCII.
+  return { "X-User-Id": u.id };
 }
