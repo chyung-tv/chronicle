@@ -68,7 +68,7 @@ class LLM:
                     {"role": "user", "content": user},
                 ],
             },
-            timeout=120.0,
+            timeout=90.0,
         )
         r.raise_for_status()
         msg = r.json()["choices"][0]["message"]
