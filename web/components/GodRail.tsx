@@ -44,7 +44,7 @@ export function GodRail({
           世界事件
           <input
             name="inject"
-            placeholder="隕石擊中碼頭"
+            placeholder="忽然變了天"
             autoComplete="off"
             disabled={busy}
           />

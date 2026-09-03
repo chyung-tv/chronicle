@@ -110,14 +110,29 @@ def named_object(world: World, actor_id: str, text: str, *, held: bool = False) 
     return None
 
 
+def peel_speech_quotes(text: str) -> str:
+    """Strip wrapping quotes so we do not emit 「「line」」 in the tape."""
+    s = (text or "").strip()
+    pairs = (("「", "」"), ("『", "』"), ("“", "”"), ('"', '"'), ("'", "'"))
+    changed = True
+    while s and changed:
+        changed = False
+        for a, b in pairs:
+            if len(s) >= 2 and s.startswith(a) and s.endswith(b):
+                s = s[len(a) : len(s) - len(b)].strip()
+                changed = True
+                break
+    return s
+
+
 def extract_speech(text: str) -> str:
     for sep in ("道：", "道:", "說：", "說:", "：「"):
         if sep in text:
-            return text.split(sep, 1)[1].strip("「」\"' ").strip()
+            return peel_speech_quotes(text.split(sep, 1)[1])
     m = re.search(r"[「\"'](.+)[」\"']", text)
     if m:
-        return m.group(1).strip()
-    return text.strip()
+        return peel_speech_quotes(m.group(1))
+    return peel_speech_quotes(text)
 
 
 def heuristic_action(world: World, actor_id: str, text: str) -> Action:
@@ -410,7 +425,7 @@ def apply_verdict(
             speaker = world.actor(sp.speaker_id)
         except Exception:
             continue
-        line = (sp.text or "").strip()[:800]
+        line = peel_speech_quotes((sp.text or "").strip()[:800])
         if not line:
             continue
         hearer = sp.hearer_id

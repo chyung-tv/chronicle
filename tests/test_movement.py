@@ -180,3 +180,35 @@ def test_apply_verdict_stores_quoted_speech_payload(world):
     ).fetchone()
     assert ev["kind"] == "speak"
     assert "「你也在。」" in ev["summary"]
+    assert "「「" not in ev["summary"]
+
+
+def test_apply_verdict_peels_nested_speech_quotes(world):
+    world.set_actor_location("mara", "quay")
+    verdict = RefereeVerdict(
+        summary="張渡向關瑪認錯。",
+        kind="speak",
+        speeches=[
+            SpeechOut(
+                speaker_id="tomas",
+                hearer_id="mara",
+                text="「阿茶……這碗，是我摔的。」",
+            )
+        ],
+    )
+    out = apply_verdict(
+        world,
+        actor_id="tomas",
+        counterpart_id="mara",
+        a_text="對關瑪認錯。",
+        b_text=None,
+        verdict=verdict,
+    )
+    payload = world.event_payload(out["event_id"])
+    assert payload["speeches"][0]["text"] == "阿茶……這碗，是我摔的。"
+    ev = world.cx.execute(
+        "SELECT kind, summary FROM events WHERE id=?", (out["event_id"],)
+    ).fetchone()
+    assert ev["kind"] == "speak"
+    assert "「「" not in ev["summary"]
+    assert "「阿茶……這碗，是我摔的。」" in ev["summary"]
