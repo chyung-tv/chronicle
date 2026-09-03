@@ -115,8 +115,15 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
             r"[^a-z0-9]+", "_", (patch.name or "object").lower()
         )
         world.cx.execute(
-            """INSERT OR REPLACE INTO objects(id, name, description, location_id, holder_id, hidden, destroyed)
-               VALUES(?,?,?,?,NULL,?,0)""",
+            """INSERT INTO objects(id, name, description, location_id, holder_id, hidden, destroyed)
+               VALUES(?,?,?,?,NULL,?,0)
+               ON CONFLICT(id) DO UPDATE SET
+                 name=excluded.name,
+                 description=excluded.description,
+                 location_id=excluded.location_id,
+                 holder_id=NULL,
+                 hidden=excluded.hidden,
+                 destroyed=0""",
             (
                 oid,
                 patch.name or oid,

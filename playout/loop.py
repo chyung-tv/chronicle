@@ -89,21 +89,45 @@ class Simulation:
                     self._end_activity(err)
 
     @classmethod
-    def create(cls, db_path: str, scenario_path: str | None = None) -> "Simulation":
-        world = world_from_scenario(db_path, scenario_path or SCENARIO)
+    def create(
+        cls,
+        db_path: str,
+        scenario_path: str | None = None,
+        *,
+        database_url: str | None = None,
+    ) -> "Simulation":
+        world = world_from_scenario(
+            db_path, scenario_path or SCENARIO, database_url=database_url
+        )
         return cls(world)
 
     @classmethod
-    def create_from_setup(cls, db_path: str, setup: dict[str, Any]) -> "Simulation":
-        world = world_from_setup(db_path, setup)
+    def create_from_setup(
+        cls,
+        db_path: str,
+        setup: dict[str, Any],
+        *,
+        database_url: str | None = None,
+    ) -> "Simulation":
+        world = world_from_setup(db_path, setup, database_url=database_url)
         return cls(world)
 
     @classmethod
-    def open_existing(cls, db_path: str) -> "Simulation":
+    def open_existing(
+        cls, db_path: str, *, database_url: str | None = None
+    ) -> "Simulation":
+        from playout import sql as dbsql
+
+        if dbsql.is_postgres_source(db_path):
+            if not dbsql.schema_exists(
+                dbsql.story_id_from_source(db_path), url=database_url
+            ):
+                raise FileNotFoundError(db_path)
+            return cls(World(db_path, database_url=database_url))
         path = Path(db_path)
         if not path.exists():
             raise FileNotFoundError(db_path)
-        return cls(World(path))
+        return cls(World(path, database_url=database_url))
 
     @classmethod
     def open(cls, db_path: str, scenario_path: str | None = None) -> "Simulation":

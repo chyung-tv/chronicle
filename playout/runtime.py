@@ -40,8 +40,8 @@ class StoryRuntime:
             sim = self._sims.get(rec.id)
             if sim is not None:
                 return sim
-            path = self.store.canon_path(rec.id)
-            sim = Simulation.open_existing(str(path))
+            path = self.store.canon_ref(rec.id)
+            sim = Simulation.open_existing(str(path), database_url=self.store.database_url)
             self._sims[rec.id] = sim
             return sim
 
@@ -50,8 +50,10 @@ class StoryRuntime:
             raise AlreadyLive("already live")
         with self._lock:
             self.close_one(rec.id)
-            path = self.store.canon_path(rec.id)
-            sim = Simulation.create_from_setup(str(path), rec.setup())
+            path = self.store.canon_ref(rec.id)
+            sim = Simulation.create_from_setup(
+                str(path), rec.setup(), database_url=self.store.database_url
+            )
             self.store.mark_live(rec.id)
             self._sims[rec.id] = sim
             return sim

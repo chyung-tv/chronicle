@@ -52,7 +52,11 @@ def stories_dir() -> Path:
 def get_store() -> StoryStore:
     global store
     if store is None:
-        store = StoryStore(catalog_path(), stories_dir())
+        store = StoryStore(
+            catalog_path(),
+            stories_dir(),
+            database_url=os.getenv("DATABASE_URL") or os.getenv("PLAYOUT_DATABASE_URL"),
+        )
     return store
 
 
@@ -231,6 +235,19 @@ def index():
         "ui": os.getenv("PLAYOUT_UI_ORIGIN", "http://127.0.0.1:3000"),
         "stories": "/api/stories",
     }
+
+
+@app.get("/api/health")
+def health():
+    st = get_store()
+    try:
+        st.cx.execute("SELECT 1")
+        return {
+            "ok": True,
+            "db": "postgres" if st.database_url else "sqlite",
+        }
+    finally:
+        st.cx.rollback()
 
 
 @app.get("/api/me")
