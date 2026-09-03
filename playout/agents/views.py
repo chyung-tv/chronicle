@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from playout.canon import World
 from playout.memory import retrieve
+from playout.models import LocationNode, WorldAtmosphere
 
 
 class ObjectView(BaseModel):
@@ -42,48 +43,31 @@ class ActorView(BaseModel):
     mood: str = ""
     injured: bool = False
     alive: bool = True
-    location_id: str
-    location_name: str
-    location_description: str
-    location_intact: bool = True
-    present: list[PersonView] = Field(default_factory=list)
-    visible_objects: list[ObjectView] = Field(default_factory=list)
+    location: LocationNode
     inventory: list[ObjectView] = Field(default_factory=list)
-    adjacent: list[str] = Field(default_factory=list)
     relations: list[RelationView] = Field(default_factory=list)
     perceptions: list[str] = Field(default_factory=list)
     memories: list[str] = Field(default_factory=list)
     reflections: list[str] = Field(default_factory=list)
 
-
-class WorldView(BaseModel):
-    title: str = ""
-    worldview: str = ""
-    day: int = 1
-    beat: str = ""
-    weather: str = ""
-    clock: str = ""
+    @property
+    def location_id(self) -> str:
+        return self.location.id
 
 
-def world_view(world: World) -> WorldView:
-    return WorldView(
-        title=world.meta("title") or "",
-        worldview=world.meta("worldview") or "",
-        day=world.day,
-        beat=world.beat_label,
-        weather=world.meta("weather") or "",
-        clock=world.meta("clock") or "",
-    )
+class WorldView(WorldAtmosphere):
+    """Alias: atmosphere is the non-spatial world."""
+
+
+def world_view(world: World) -> WorldAtmosphere:
+    return world.atmosphere()
 
 
 def actor_view(world: World, actor_id: str, extra: str = "") -> ActorView:
     a = world.actor(actor_id)
-    loc = world.location(a["location_id"])
-    others = [x for x in world.actors_at(a["location_id"]) if x["id"] != actor_id]
-    adj = []
-    for aid in world.adjacent(a["location_id"]):
-        dest = world.location(aid)
-        adj.append(f"{aid}（{dest['name']}）")
+    node = world.node(a["location_id"])
+    present_self = [p for p in node.present if p.id != actor_id]
+    node = node.model_copy(update={"present": present_self})
     rels: list[RelationView] = []
     for o in world.living_actors():
         if o["id"] == actor_id:
@@ -111,28 +95,11 @@ def actor_view(world: World, actor_id: str, extra: str = "") -> ActorView:
         mood=a["mood"],
         injured=bool(a["injured"]),
         alive=bool(a["alive"]),
-        location_id=a["location_id"],
-        location_name=loc["name"],
-        location_description=loc["description"],
-        location_intact=bool(loc["intact"]),
-        present=[
-            PersonView(
-                id=o["id"],
-                name=o["name"],
-                injured=bool(o["injured"]),
-                alive=bool(o["alive"]),
-            )
-            for o in others
-        ],
-        visible_objects=[
-            ObjectView(id=o["id"], name=o["name"], description=o["description"])
-            for o in world.visible_objects(a["location_id"])
-        ],
+        location=node,
         inventory=[
             ObjectView(id=o["id"], name=o["name"], description=o["description"])
             for o in world.inventory(actor_id)
         ],
-        adjacent=adj,
         relations=rels,
         perceptions=[
             f"第{p['day']}日 {p['text']}" for p in world.perceptions_for(actor_id, limit=12)
@@ -145,13 +112,14 @@ def actor_view(world: World, actor_id: str, extra: str = "") -> ActorView:
 def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
     w = world_view(world)
     a = actor_view(world, actor_id, extra)
+    loc = a.location
     people = (
         "、".join(
-            f"{p.name}（{p.id}）" + ("，帶傷" if p.injured else "") for p in a.present
+            f"{p.name}（{p.id}）" + ("，帶傷" if p.injured else "") for p in loc.present
         )
         or "無人"
     )
-    obj_s = "、".join(f"{o.name} [{o.id}]" for o in a.visible_objects) or "眼前無物"
+    obj_s = "、".join(f"{o.name} [{o.id}]" for o in loc.visible_objects) or "眼前無物"
     inv_s = "、".join(f"{o.name} [{o.id}]" for o in a.inventory) or "空手"
     perc_s = "\n".join(f"- {p}" for p in a.perceptions[:10]) or "- （尚無）"
     mem_s = "\n".join(f"- {m}" for m in a.memories) or "- （日記空白）"
@@ -163,6 +131,11 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
         )
         or "（淡）"
     )
+    exits = [
+        f"{e.id}（{e.name}）" + ("" if e.intact else "，已毀不可入")
+        for e in loc.connected
+    ]
+    walkable = [e.id for e in loc.connected if e.intact]
     return f"""世界：{w.title}。{w.worldview}
 時辰：{w.beat}。天色：{w.weather}。
 期限：{w.clock}
@@ -176,12 +149,13 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
 心境：{a.mood}
 帶傷：{a.injured}
 
-此地：{a.location_name}（{a.location_id}）。{a.location_description}
-完好：{a.location_intact}
+此地：{loc.name}（{loc.id}）。{loc.description}
+完好：{loc.intact}
 在場：{people}
 可見之物：{obj_s}
 隨身：{inv_s}
-相鄰：{", ".join(a.adjacent) or "無"}
+相鄰：{", ".join(exits) or "無"}
+可走（move 的 to）：{", ".join(walkable) or "無"}
 
 關係：
 {rel_s}

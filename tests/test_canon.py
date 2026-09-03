@@ -53,3 +53,14 @@ def test_epistemic_perceptions_are_per_actor(world):
     assert not any(
         "Tomas told you" in p["text"] or "You told Ellis" in p["text"] for p in mara
     )
+
+
+def test_node_and_atmosphere(world):
+    node = world.node("quay")
+    assert node.name == "碼頭"
+    assert "鐵環" in node.description or "樁" in node.description
+    ids = {e.id for e in world.exits("quay")}
+    assert ids == {"bakery", "inn", "boathouse"}
+    atmo = world.atmosphere()
+    assert atmo.title == "港尾"
+    assert atmo.weather

@@ -43,6 +43,8 @@ ALLOWED_KINDS = {
     "failed_speak",
     "failed_attack",
     "failed_take",
+    "failed_move",
+    "forced_move",
     "interact",
     "move",
 }
@@ -64,7 +66,8 @@ REFEREE_SYSTEM = with_prose("""你是封閉正史模擬的裁判，不是人物�
 - 不可殺死、打傷不在此地之人。
 - 不可取走仍隱藏、且本回合尚未被察看揭開之物。
 - 不可取走不在此地或已在別人手上之物。
-- 移動只可到相鄰地點。
+- 移動只可到相鄰且完好的地點。不可寫未走到之地。
+- 實際說出的話必須放進 speeches，原文加引號，不可只寫「打了招呼」。
 - 暴力可以失敗。無趁手的兵器、對方未受傷時，欲殺多半只成受傷（attempted_kill）。
 - 若乙方不理（b_text 為空），仍要判定甲方單獨做成了什麼。
 - 對白、summary、perceptions、detail 一律繁體中文。
@@ -208,7 +211,7 @@ def action_as_interact_text(world: World, actor_id: str, action: Action) -> str 
 
 def scene_brief(world: World, a_id: str, b_id: str | None) -> str:
     a = world.actor(a_id)
-    loc = world.location(a["location_id"])
+    node = world.node(a["location_id"])
     bodies = []
     for person in world.actors_at(a["location_id"], alive_only=False):
         inv = [
@@ -227,12 +230,12 @@ def scene_brief(world: World, a_id: str, b_id: str | None) -> str:
         )
     visible = [
         {
-            "id": o["id"],
-            "name": o["name"],
-            "description": o["description"],
+            "id": o.id,
+            "name": o.name,
+            "description": o.description,
             "hidden": False,
         }
-        for o in world.visible_objects(a["location_id"])
+        for o in node.visible_objects
     ]
     hidden = [
         {"id": o["id"], "name": o["name"], "hidden": True}
@@ -256,15 +259,15 @@ def scene_brief(world: World, a_id: str, b_id: str | None) -> str:
                         "notes": row["notes"],
                     }
                 )
-    adj = world.adjacent(a["location_id"])
     return json.dumps(
         {
             "location": {
-                "id": loc["id"],
-                "name": loc["name"],
-                "description": loc["description"],
-                "intact": bool(loc["intact"]),
-                "adjacent": adj,
+                "id": node.id,
+                "name": node.name,
+                "description": node.description,
+                "intact": node.intact,
+                "connected": [e.model_dump() for e in node.connected],
+                "exits": [e.id for e in world.exits(node.id)],
             },
             "bodies": bodies,
             "visible_objects": visible,
@@ -273,6 +276,19 @@ def scene_brief(world: World, a_id: str, b_id: str | None) -> str:
         },
         ensure_ascii=False,
     )
+
+
+def _summary_claims_failed_hop(summary: str, failed: list) -> bool:
+    blob = summary or ""
+    for res in failed:
+        if res.to_id and res.to_id in blob:
+            return True
+        if res.dest_name and res.dest_name in blob:
+            return True
+    if not failed:
+        return False
+    walk = ("前往", "走向", "走到", "去了")
+    return any(w in blob for w in walk)
 
 
 def apply_verdict(
@@ -284,20 +300,17 @@ def apply_verdict(
     b_text: str | None,
     verdict: RefereeVerdict,
 ) -> dict[str, Any]:
-    initiator = world.actor(actor_id)
-    loc = initiator["location_id"]
-    here = {p["id"] for p in world.actors_at(loc)}
-    kind = verdict.kind if verdict.kind in ALLOWED_KINDS else "interact"
-
-    eid = world.append_event(
-        kind,
-        (verdict.summary or "場上有事發生。")[:800],
-        actor_id=actor_id,
-        target_id=counterpart_id,
-        payload={"a_text": a_text, "b_text": b_text},
-    )
-
+    from playout.models import MoveIntent
+    from playout.movement import apply_move, write_move_perceptions
     from playout.storyteller import _apply_patch
+
+    initiator = world.actor(actor_id)
+    start_loc = initiator["location_id"]
+    here = {p["id"] for p in world.actors_at(start_loc)}
+    kind = verdict.kind if verdict.kind in ALLOWED_KINDS else "interact"
+    pending: list[tuple[str, str]] = []
+    ok_moves: list = []
+    failed_moves: list = []
 
     for patch in verdict.patches:
         op = patch.op
@@ -308,14 +321,15 @@ def apply_verdict(
             if not target["alive"]:
                 continue
             world.set_alive(patch.actor_id, False)
-            world.perceive(
-                eid,
-                actor_id,
-                patch.detail or f"你殺死了{target['name']}。",
+            pending.append(
+                (actor_id, patch.detail or f"你殺死了{target['name']}。")
             )
             for wid in here - {actor_id, patch.actor_id}:
-                world.perceive(
-                    eid, wid, patch.detail or f"{initiator['name']}殺死了{target['name']}。"
+                pending.append(
+                    (
+                        wid,
+                        patch.detail or f"{initiator['name']}殺死了{target['name']}。",
+                    )
                 )
             continue
         if op == "injure_actor":
@@ -323,37 +337,44 @@ def apply_verdict(
                 continue
             target = world.actor(patch.actor_id)
             world.set_injured(patch.actor_id, True)
-            world.perceive(eid, patch.actor_id, patch.detail or "你受傷了。")
+            pending.append((patch.actor_id, patch.detail or "你受傷了。"))
             continue
         if op == "move_actor" and patch.actor_id and patch.location_id:
-            mover = world.actor(patch.actor_id)
-            if not mover["alive"]:
-                continue
-            if patch.location_id not in world.adjacent(mover["location_id"]):
-                continue
-            world.set_actor_location(patch.actor_id, patch.location_id)
-            dest = world.location(patch.location_id)
-            world.perceive(
-                eid, patch.actor_id, patch.detail or f"你到了{dest['name']}。"
+            res = apply_move(
+                world,
+                MoveIntent(
+                    actor_id=patch.actor_id,
+                    to=patch.location_id,
+                    kind="voluntary",
+                ),
+                record_event=False,
+                detail=patch.detail or None,
             )
+            if res.ok:
+                ok_moves.append(res)
+            else:
+                failed_moves.append(res)
             continue
         if op == "destroy_location":
             continue
-        _apply_patch(world, eid, patch)
+        # Other patches (objects, rumor, weather…) need an event id; apply after seal.
 
     revealed: set[str] = set()
+    object_notes: list[tuple[str, str]] = []
     for mut in verdict.objects:
         if mut.op == "reveal" and mut.object_id:
             obj = world.object(mut.object_id)
             if not obj or obj["destroyed"]:
                 continue
-            if obj["location_id"] != loc:
+            if obj["location_id"] != start_loc:
                 continue
             world.cx.execute(
                 "UPDATE objects SET hidden=0 WHERE id=?", (mut.object_id,)
             )
             revealed.add(mut.object_id)
-            world.perceive(eid, mut.actor_id or actor_id, mut.text or f"你看見{obj['name']}。")
+            object_notes.append(
+                (mut.actor_id or actor_id, mut.text or f"你看見{obj['name']}。")
+            )
 
     for mut in verdict.objects:
         if mut.op == "take" and mut.object_id:
@@ -369,7 +390,7 @@ def apply_verdict(
                 "UPDATE objects SET holder_id=?, location_id=NULL WHERE id=?",
                 (holder, mut.object_id),
             )
-            world.perceive(eid, holder, mut.text or f"你取走{obj['name']}。")
+            object_notes.append((holder, mut.text or f"你取走{obj['name']}。"))
         elif mut.op == "drop" and mut.object_id:
             holder = mut.actor_id or actor_id
             obj = world.object(mut.object_id)
@@ -380,49 +401,163 @@ def apply_verdict(
                 "UPDATE objects SET holder_id=NULL, location_id=? WHERE id=?",
                 (here_id, mut.object_id),
             )
-            world.perceive(eid, holder, mut.text or f"你放下{obj['name']}。")
-        elif mut.op == "write_note":
-            writer = mut.actor_id or actor_id
-            apply_action(
-                world, writer, WriteNoteAction(text=(mut.text or a_text)[:500])
-            )
+            object_notes.append((holder, mut.text or f"你放下{obj['name']}。"))
 
+    accepted_speeches: list[dict[str, str | None]] = []
+    speech_notes: list[tuple[str, str]] = []
     for sp in verdict.speeches:
         try:
             speaker = world.actor(sp.speaker_id)
         except Exception:
             continue
-        if speaker["location_id"] != loc:
-            continue
-        hearer = sp.hearer_id
-        line = sp.text.strip()[:800]
+        line = (sp.text or "").strip()[:800]
         if not line:
             continue
+        hearer = sp.hearer_id
         if hearer:
             try:
                 other = world.actor(hearer)
             except Exception:
                 other = None
-            if other and other["location_id"] == loc:
-                world.perceive(eid, sp.speaker_id, f"你對{other['name']}道：「{line}」")
-                world.perceive(eid, hearer, f"{speaker['name']}對你道：「{line}」")
+            if (
+                other
+                and other["location_id"] == speaker["location_id"]
+            ):
+                speech_notes.append(
+                    (sp.speaker_id, f"你對{other['name']}道：「{line}」")
+                )
+                speech_notes.append(
+                    (hearer, f"{speaker['name']}對你道：「{line}」")
+                )
+                for wid in world.actors_at(speaker["location_id"]):
+                    if wid["id"] in {sp.speaker_id, hearer}:
+                        continue
+                    speech_notes.append(
+                        (
+                            wid["id"],
+                            f"{speaker['name']}對{other['name']}道：「{line}」",
+                        )
+                    )
+                accepted_speeches.append(
+                    {
+                        "speaker_id": sp.speaker_id,
+                        "hearer_id": hearer,
+                        "text": line,
+                    }
+                )
                 continue
-        world.perceive(eid, sp.speaker_id, f"你道：「{line}」")
+        # Unaddressed line: only if speaker is still at the event node or just arrived.
+        if speaker["location_id"] != start_loc and sp.speaker_id not in {
+            r.actor_id for r in ok_moves
+        }:
+            continue
+        speech_notes.append((sp.speaker_id, f"你道：「{line}」"))
+        accepted_speeches.append(
+            {"speaker_id": sp.speaker_id, "hearer_id": None, "text": line}
+        )
+
+    summary = (verdict.summary or "場上有事發生。")[:800]
+    if failed_moves and not ok_moves:
+        if kind == "move" or _summary_claims_failed_hop(summary, failed_moves):
+            kind = "failed_move"
+            summary = failed_moves[0].summary
+    elif ok_moves and kind == "move":
+        if _summary_claims_failed_hop(summary, failed_moves):
+            summary = ok_moves[0].summary
+    if accepted_speeches and kind in ("interact", "speak"):
+        kind = "speak"
+        if "「" not in summary:
+            first = accepted_speeches[0]
+            speaker = world.actor(str(first["speaker_id"]))
+            hearer_id = first.get("hearer_id")
+            line = str(first["text"])
+            if hearer_id:
+                hearer = world.actor(str(hearer_id))
+                summary = f"{speaker['name']}對{hearer['name']}道：「{line}」"
+            else:
+                summary = f"{speaker['name']}道：「{line}」"
+
+    mover_ids = {r.actor_id for r in ok_moves}
+    dest_ids = {r.to_id for r in ok_moves if r.to_id}
+    payload: dict[str, Any] = {
+        "a_text": a_text,
+        "b_text": b_text,
+        "speeches": accepted_speeches,
+        "location_id": start_loc,
+    }
+    if ok_moves:
+        payload["from"] = ok_moves[0].from_id
+        payload["to"] = ok_moves[0].to_id
+    elif failed_moves:
+        payload["from"] = failed_moves[0].from_id
+        payload["to"] = failed_moves[0].to_id
+        payload["reason"] = failed_moves[0].reason
+
+    eid = world.append_event(
+        kind,
+        summary,
+        actor_id=actor_id,
+        target_id=counterpart_id,
+        payload=payload,
+    )
+
+    for res in ok_moves + failed_moves:
+        write_move_perceptions(world, eid, res)
+
+    for aid, text in pending + object_notes + speech_notes:
+        world.perceive(eid, aid, text)
+
+    allowed_perc: set[str] = set()
+    for p in world.actors_at(start_loc):
+        allowed_perc.add(p["id"])
+    allowed_perc.update(mover_ids)
+    for dest in dest_ids:
+        for p in world.actors_at(dest):
+            allowed_perc.add(p["id"])
 
     seen: set[tuple[str, str]] = set()
     for perc in verdict.perceptions:
         try:
-            world.actor(perc.actor_id)
+            person = world.actor(perc.actor_id)
         except Exception:
+            continue
+        if perc.actor_id not in allowed_perc:
+            continue
+        if person["location_id"] not in {start_loc, *dest_ids} and perc.actor_id not in mover_ids:
             continue
         text = (perc.text or "").strip()[:800]
         if not text:
+            continue
+        # Drop free-form claims of a hop that did not happen.
+        skip = False
+        for res in failed_moves:
+            if res.dest_name and res.dest_name in text and perc.actor_id == res.actor_id:
+                skip = True
+                break
+        if skip:
             continue
         key = (perc.actor_id, text)
         if key in seen:
             continue
         seen.add(key)
         world.perceive(eid, perc.actor_id, text)
+
+    for patch in verdict.patches:
+        if patch.op in (
+            "kill_actor",
+            "injure_actor",
+            "move_actor",
+            "destroy_location",
+        ):
+            continue
+        _apply_patch(world, eid, patch)
+
+    for mut in verdict.objects:
+        if mut.op == "write_note":
+            writer = mut.actor_id or actor_id
+            apply_action(
+                world, writer, WriteNoteAction(text=(mut.text or a_text)[:500])
+            )
 
     for rel in verdict.relations:
         try:
@@ -456,7 +591,7 @@ def apply_verdict(
     return {
         "ok": True,
         "event_id": eid,
-        "summary": verdict.summary,
+        "summary": summary,
         "kind": kind,
         "action": {"type": "interact", "text": a_text},
     }

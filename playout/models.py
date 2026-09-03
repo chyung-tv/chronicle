@@ -174,6 +174,73 @@ class WriterChapter(BaseModel):
     text: str
 
 
+class ConnectedExit(BaseModel):
+    """A neighbor on the location graph. Ruined exits are listed but not walkable."""
+
+    id: str
+    name: str
+    intact: bool = True
+
+
+class NodePerson(BaseModel):
+    id: str
+    name: str
+    injured: bool = False
+    alive: bool = True
+
+
+class NodeObject(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+
+
+class LocationNode(BaseModel):
+    """A place an actor can stand. description is the environmental palette."""
+
+    id: str
+    name: str
+    description: str
+    intact: bool = True
+    x: float = 0
+    y: float = 0
+    connected: list[ConnectedExit] = Field(default_factory=list)
+    present: list[NodePerson] = Field(default_factory=list)
+    visible_objects: list[NodeObject] = Field(default_factory=list)
+
+
+class WorldAtmosphere(BaseModel):
+    """Non-spatial world: weather, clock, worldview. Visible everywhere."""
+
+    title: str = ""
+    worldview: str = ""
+    day: int = 1
+    beat: str = ""
+    weather: str = ""
+    clock: str = ""
+
+
+class MoveIntent(BaseModel):
+    actor_id: str
+    to: str
+    kind: Literal["voluntary", "forced", "evacuate"] = "voluntary"
+
+
+class MoveResolution(BaseModel):
+    ok: bool
+    actor_id: str
+    from_id: str
+    to_id: str | None = None
+    dest_name: str = ""
+    kind: Literal["voluntary", "forced", "evacuate"] = "voluntary"
+    reason: str | None = None
+    summary: str = ""
+    self_perception: str = ""
+    leave_perception: str = ""
+    arrive_perception: str = ""
+    event_id: int | None = None
+
+
 def action_from_dict(data: dict[str, Any]) -> Action:
     t = data.get("type")
     mapping = {

@@ -467,6 +467,82 @@ class World:
             r["b"] for r in self.cx.execute("SELECT b FROM edges WHERE a=?", (loc_id,))
         ]
 
+    def exits(self, loc_id: str) -> list["ConnectedExit"]:
+        """Intact neighbors — the only legal voluntary/forced hop destinations."""
+        from playout.models import ConnectedExit
+
+        out: list[ConnectedExit] = []
+        for dest_id in self.adjacent(loc_id):
+            dest = self.location(dest_id)
+            if dest["intact"]:
+                out.append(
+                    ConnectedExit(id=dest["id"], name=dest["name"], intact=True)
+                )
+        return out
+
+    def node(self, loc_id: str) -> "LocationNode":
+        from playout.models import ConnectedExit, LocationNode, NodeObject, NodePerson
+
+        loc = self.location(loc_id)
+        connected: list[ConnectedExit] = []
+        for dest_id in self.adjacent(loc_id):
+            dest = self.location(dest_id)
+            connected.append(
+                ConnectedExit(
+                    id=dest["id"],
+                    name=dest["name"],
+                    intact=bool(dest["intact"]),
+                )
+            )
+        present = [
+            NodePerson(
+                id=a["id"],
+                name=a["name"],
+                injured=bool(a["injured"]),
+                alive=bool(a["alive"]),
+            )
+            for a in self.actors_at(loc_id, alive_only=False)
+        ]
+        objects = [
+            NodeObject(id=o["id"], name=o["name"], description=o["description"])
+            for o in self.visible_objects(loc_id)
+        ]
+        return LocationNode(
+            id=loc["id"],
+            name=loc["name"],
+            description=loc["description"],
+            intact=bool(loc["intact"]),
+            x=float(loc["x"] or 0),
+            y=float(loc["y"] or 0),
+            connected=connected,
+            present=present,
+            visible_objects=objects,
+        )
+
+    def atmosphere(self) -> "WorldAtmosphere":
+        from playout.models import WorldAtmosphere
+
+        return WorldAtmosphere(
+            title=self.meta("title") or "",
+            worldview=self.meta("worldview") or "",
+            day=self.day,
+            beat=self.beat_label,
+            weather=self.meta("weather") or "",
+            clock=self.meta("clock") or "",
+        )
+
+    def event_payload(self, event_id: int) -> dict[str, Any]:
+        row = self.cx.execute(
+            "SELECT payload FROM events WHERE id=?", (event_id,)
+        ).fetchone()
+        if not row:
+            return {}
+        try:
+            data = json.loads(row["payload"] or "{}")
+        except json.JSONDecodeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
     def visible_objects(
         self, loc_id: str, include_hidden: bool = False
     ) -> list[sqlite3.Row]:

@@ -177,7 +177,7 @@ def _heuristic_campaign(world: World, text: str) -> SteerCampaign:
             continue
         if other["location_id"] == isolate_loc:
             refuge = next(
-                (x for x in world.adjacent(isolate_loc) if x), other["location_id"]
+                (x.id for x in world.exits(isolate_loc) if x.id), other["location_id"]
             )
             opp.append(
                 Patch(

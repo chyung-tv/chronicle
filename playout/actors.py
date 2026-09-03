@@ -21,7 +21,7 @@ Action must be one of:
 
 規則：
 - interact 可對在場之人說話、取物、察看、動手、寫紙。點出對方姓名或 id。
-- move 只能去相鄰的 location_id。
+- 移動只可到相鄰且完好的 location_id。move 的 to 必須是眼前「可走」清單中的 id。
 - 不要敘述世界。只選一個行動。
 - 若你自己決定，可以動武。勿輕易殺人。
 thought、goal_update、interact 的 text 一律繁體中文。
@@ -120,7 +120,7 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
         "mara": ["boathouse", "quay", "cliff_path"],
         "ellis": ["inn", "bakery", "quay"],
     }.get(actor_id, [])
-    adj = world.adjacent(loc)
+    adj = [e.id for e in world.exits(loc)]
     for dest in prefer:
         if dest in adj:
             return ActorDecision(

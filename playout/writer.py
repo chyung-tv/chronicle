@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import json
 from typing import Any
 
 from playout.canon import World
@@ -13,18 +13,14 @@ from playout.zh import with_prose
 WRITER_SYSTEM = with_prose("""你是小說家，重述一份模擬日誌。可以壓縮、略過早飯、選定一個視角。
 不可捏造日誌裡沒有的事件、死亡、親吻、發現或對白。
 每一樁事實都須能被所引的 event id 支撐。
-當日無人死，就不要寫死。
-有人說過話，用詞可稍加打磨，意思不可改。
+當日無人死，就不要寫死；當日有死，照實寫，不必迴避。
+有 payload.speeches 時，寫成「甲對乙道：「…」」。用詞可稍加打磨，意思與引號內的話不可改。
+沒有記錄下來的台詞，才可改寫成招呼、點頭之類。
+可就「地點」裡已有的環境描寫與當天天色加以渲染（潮、風、氣味、泥）。不可添該地描述與事件帶都沒有的物件、足跡或房間。
 
 只回傳 JSON：
 {"pov":"<actor_id>","tags":["背叛","颱風"],"cited_event_ids":[1,2,3],"text":"章回正文，繁體中文書面，約四百至八百字"}
 """)
-
-DEATH_WORDS = re.compile(
-    r"\b(killed|kills|murdered|dead|dies|died|corpse|body)\b|"
-    r"殺死|殺害|殺了|死了|屍體|身亡|斃命",
-    re.I,
-)
 
 
 def _sift_tags(summaries: list[str]) -> list[str]:
@@ -43,6 +39,58 @@ def _sift_tags(summaries: list[str]) -> list[str]:
     return tags or ["日常"]
 
 
+def _parse_payload(raw: str | None) -> dict[str, Any]:
+    try:
+        data = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def writer_pack(world: World, day: int) -> dict[str, Any]:
+    """Tape plus location palettes the novelist may thicken."""
+    events = world.events_for_day(day)
+    tape: list[dict[str, Any]] = []
+    touched: set[str] = set()
+    for e in events:
+        payload = _parse_payload(e["payload"] if "payload" in e.keys() else "{}")
+        row = {
+            "id": e["id"],
+            "kind": e["kind"],
+            "summary": e["summary"],
+            "actor_id": e["actor_id"],
+            "target_id": e["target_id"],
+            "payload": payload,
+        }
+        tape.append(row)
+        for key in ("from", "to", "location_id"):
+            loc = payload.get(key)
+            if loc:
+                touched.add(str(loc))
+        if e["actor_id"]:
+            try:
+                touched.add(world.actor(e["actor_id"])["location_id"])
+            except Exception:
+                pass
+    nodes = []
+    for loc_id in sorted(touched):
+        try:
+            node = world.node(loc_id)
+        except Exception:
+            continue
+        nodes.append(
+            {"id": node.id, "name": node.name, "description": node.description}
+        )
+    atmo = world.atmosphere()
+    return {
+        "tape": tape,
+        "locations": nodes,
+        "weather": atmo.weather,
+        "clock": atmo.clock,
+        "beat": atmo.beat,
+    }
+
+
 def _heuristic_chapter(world: World, day: int, events: list) -> WriterChapter:
     living = [a for a in world.living_actors()]
     pov = living[day % len(living)]["id"] if living else "lena"
@@ -54,7 +102,29 @@ def _heuristic_chapter(world: World, day: int, events: list) -> WriterChapter:
         if e["kind"] in skip_kinds:
             continue
         cited.append(e["id"])
-        lines.append(f"{e['summary']}")
+        payload = _parse_payload(e["payload"] if "payload" in e.keys() else "{}")
+        speeches = payload.get("speeches") or []
+        if speeches:
+            bits = []
+            for sp in speeches:
+                speaker_id = sp.get("speaker_id")
+                try:
+                    speaker = world.actor(speaker_id)["name"] if speaker_id else "有人"
+                except Exception:
+                    speaker = speaker_id or "有人"
+                hearer_id = sp.get("hearer_id")
+                line = sp.get("text") or ""
+                if hearer_id:
+                    try:
+                        hearer = world.actor(hearer_id)["name"]
+                    except Exception:
+                        hearer = hearer_id
+                    bits.append(f"{speaker}對{hearer}道：「{line}」")
+                else:
+                    bits.append(f"{speaker}道：「{line}」")
+            lines.append(" ".join(bits))
+        else:
+            lines.append(f"{e['summary']}")
     tags = _sift_tags([e["summary"] for e in events])
     if not lines:
         text = (
@@ -76,39 +146,23 @@ def validate_chapter(world: World, day: int, chapter: WriterChapter) -> WriterCh
     if not cited:
         cited = [e["id"] for e in world.events_for_day(day) if e["kind"] != "wait"]
     chapter.cited_event_ids = cited
-    deaths = world.death_events()
-    death_ids = {e["id"] for e in deaths}
-    day_death = any(e["day"] == day for e in deaths)
-    if (
-        DEATH_WORDS.search(chapter.text)
-        and not day_death
-        and not (set(cited) & death_ids)
-    ):
-        chapter.text = DEATH_WORDS.sub("默然", chapter.text)
-        chapter.tags = [t for t in chapter.tags if t not in ("violence", "暴力")] + [
-            "有據"
-        ]
     return chapter
 
 
 def write_day(world: World, llm: LLM, day: int) -> dict[str, Any]:
     events = world.events_for_day(day)
-    tape = [
-        {
-            "id": e["id"],
-            "kind": e["kind"],
-            "summary": e["summary"],
-            "actor_id": e["actor_id"],
-            "target_id": e["target_id"],
-        }
-        for e in events
-    ]
-    if llm.mode == "live" and tape:
+    pack = writer_pack(world, day)
+    if llm.mode == "live" and pack["tape"]:
         actors = [
             {"id": a["id"], "name": a["name"]}
             for a in world.cx.execute("SELECT id,name FROM actors")
         ]
-        user = f"第{day}日事件帶（正史）：\n{tape}\n人物：{actors}"
+        user = (
+            f"第{day}日事件帶（正史）：\n{pack['tape']}\n"
+            f"人物：{actors}\n"
+            f"地點（可渲染的環境）：{pack['locations']}\n"
+            f"天色：{pack['weather']}\n期限：{pack['clock']}"
+        )
         data = llm.complete_json(WRITER_SYSTEM, user, strong=True)
         try:
             chapter = WriterChapter.model_validate(data)
