@@ -243,8 +243,20 @@ class World:
         return labels[self.scene % n]
 
     @property
-    def day_run_multiplier(self) -> int:
-        return int(self.meta("day_run_multiplier", "2") or 2)
+    def turns_per_day_min(self) -> int:
+        n = len(self.living_actors())
+        raw = self.meta("turns_per_day_min")
+        if raw:
+            return max(n, int(raw))
+        return n
+
+    @property
+    def turns_per_day_max(self) -> int:
+        n = self.turns_per_day_min
+        raw = self.meta("turns_per_day_max")
+        if raw:
+            return max(n, min(8, int(raw)))
+        return min(8, max(n, n))
 
     def get_day_plan(self) -> dict[str, Any] | None:
         raw = self.meta("day_plan")
@@ -293,18 +305,21 @@ class World:
         self.set_meta("day", "1")
         self.set_meta("scene", "0")
         self.set_meta("scenes_per_day", str(scenario.get("scenes_per_day", 6)))
-        self.set_meta("max_days", str(scenario.get("days", 3)))
         self.set_meta("paused", "0")
-        self.set_meta("clock", json.dumps(scenario.get("clock", {})))
-        self.set_meta("weather", scenario.get("weather", "overcast, wind rising"))
+        self.set_meta("clock", scenario.get("opening_situation") or "")
+        self.set_meta("weather", "天色未定")
         self.set_meta(
             "time_labels", json.dumps(scenario.get("time_labels", TIME_LABELS))
         )
         self.set_meta("idle_scenes", "0")
         self.set_meta("idle_days", "0")
-        self.set_meta(
-            "day_run_multiplier", str(scenario.get("day_run_multiplier", 2))
-        )
+        n_actors = len(scenario.get("actors") or [])
+        hi = int(scenario.get("turns_per_day_max") or 8)
+        lo = int(scenario.get("turns_per_day_min") or n_actors or 1)
+        lo = max(n_actors, lo)
+        hi = max(lo, min(8, hi))
+        self.set_meta("turns_per_day_min", str(lo))
+        self.set_meta("turns_per_day_max", str(hi))
         self.set_meta("day_plan", "")
         self.set_meta("encounter", "")
         self.set_meta("activity", "idle")
@@ -369,17 +384,11 @@ class World:
                 ),
             )
         self.cx.commit()
-        for opening in scenario.get("opening_events", []):
-            eid = self.append_event(
-                kind=opening.get("kind", "world"),
-                summary=opening["summary"],
-                actor_id=opening.get("actor_id"),
-                target_id=opening.get("target_id"),
-                payload=opening.get("payload", {}),
-            )
-            who = opening.get("perceive", [a["id"] for a in scenario["actors"]])
-            for actor_id in who:
-                self.perceive(eid, actor_id, opening["summary"])
+        opening = (scenario.get("opening_events") or "").strip()
+        if opening:
+            eid = self.append_event(kind="world", summary=opening)
+            for act in scenario.get("actors") or []:
+                self.perceive(eid, act["id"], opening)
         self.cx.commit()
 
     def append_event(
@@ -787,11 +796,11 @@ class World:
             "time_label": self.beat_label,
             "scenes_per_day": self.scenes_per_day,
             "day_plan": self.get_day_plan(),
-            "day_run_multiplier": self.day_run_multiplier,
+            "turns_per_day_min": self.turns_per_day_min,
+            "turns_per_day_max": self.turns_per_day_max,
             "encounter": self.get_encounter(),
-            "max_days": int(self.meta("max_days", "3") or 3),
             "weather": self.meta("weather"),
-            "clock": json.loads(self.meta("clock") or "{}"),
+            "clock": self.meta("clock") or "",
             "paused": self.meta("paused") == "1",
             "llm_mode": self.meta("llm_mode", "mock"),
             "llm_model": self.meta("llm_model", ""),
@@ -829,5 +838,8 @@ def world_from_setup(db_path: str | Path, setup: dict[str, Any]) -> World:
 
 
 def world_from_scenario(db_path: str | Path, scenario_path: str | Path) -> World:
-    scenario = json.loads(Path(scenario_path).read_text())
-    return world_from_setup(db_path, scenario)
+    from playout.models import parse_story_pack
+
+    raw = json.loads(Path(scenario_path).read_text())
+    _, setup = parse_story_pack(raw)
+    return world_from_setup(db_path, setup.model_dump(mode="json"))

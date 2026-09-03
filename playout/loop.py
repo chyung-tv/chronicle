@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import random
 import threading
 from pathlib import Path
@@ -117,14 +116,10 @@ class Simulation:
         return cls.create(str(path), scenario)
 
     def _pressure_text(self) -> str:
-        raw = self.world.meta("clock") or ""
-        try:
-            parsed = json.loads(raw) if raw else {}
-            note = parsed.get("note") if isinstance(parsed, dict) else str(parsed)
-        except json.JSONDecodeError:
-            note = raw
-        note = note or "颱風將至。"
-        return f"颱風將至，鎮上記得：{note} 雷在崖路上。沒有人能假裝舢板還會自己回來。"
+        note = (self.world.meta("clock") or "").strip()
+        if not note:
+            return "鎮上的壓力還沒落地。"
+        return f"局勢未歇：{note}"
 
     def _should_pressure(self) -> bool:
         brewing = self.world.cx.execute(

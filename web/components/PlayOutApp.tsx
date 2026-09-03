@@ -20,14 +20,15 @@ import {
 function beatClock(state: {
   day: number;
   day_plan: { cursor?: number; slots?: unknown[] } | null;
-  clock?: { note?: string };
+  clock?: string;
 }) {
   const plan = state.day_plan;
   const slots = plan?.slots || [];
   const k = Math.min((plan?.cursor || 0) + 1, slots.length || 1);
   const n = slots.length;
   const beat = n ? `第 ${k}/${n} 次` : "未排今日";
-  return `第${state.day}日 · ${beat} · 風期：${state.clock?.note || ""}`;
+  const note = (state.clock || "").trim();
+  return note ? `第${state.day}日 · ${beat} · ${note}` : `第${state.day}日 · ${beat}`;
 }
 
 export function PlayOutApp({ storyId }: { storyId: string }) {

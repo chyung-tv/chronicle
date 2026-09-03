@@ -72,12 +72,7 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
         for o in others:
             if o["name"] in last or o["id"] in last_l:
                 t = o
-        speech = {
-            "lena": "不能再這樣。債、風——渡，我們得定下來。",
-            "tomas": "有船就走。別那樣看我。",
-            "mara": "有人拿走亡夫的舢板。你若曉得，說。",
-            "ellis": "風一來，舖子就是我的，除非你還清。紙上寫著。",
-        }.get(actor_id, "沒有時間了。")
+        speech = "沒有時間了。"
         return ActorDecision(
             thought="有人對我說話。",
             action=InteractAction(text=f"對{t['name']}道：{speech}"),
@@ -86,58 +81,18 @@ def _mock_decision(world: World, actor_id: str, extra: str) -> ActorDecision:
     hidden_here = world.cx.execute(
         "SELECT * FROM objects WHERE location_id=? AND hidden=1 AND destroyed=0", (loc,)
     ).fetchall()
-    if (
-        hidden_here
-        and actor_id in ("mara", "tomas")
-        and loc in ("cliff_path", "mara_cottage")
-    ):
+    if hidden_here:
         return ActorDecision(
             thought="此處不妥。",
             action=InteractAction(text=f"察看此地（{loc}）"),
         )
 
-    visible = world.visible_objects(loc)
-    for obj in visible:
-        if (
-            "letter" in obj["id"]
-            or "knife" in obj["id"]
-            or "cleaver" in obj["id"]
-            or "skiff" in obj["id"]
-        ):
-            if "letter" in obj["id"] or "skiff" in obj["id"]:
-                return ActorDecision(
-                    thought="得看清楚。",
-                    action=InteractAction(text=f"察看{obj['name']}（{obj['id']}）"),
-                )
-            return ActorDecision(
-                thought="或許用得著。",
-                action=InteractAction(text=f"取走{obj['name']}（{obj['id']}）"),
-            )
-
-    prefer = {
-        "lena": ["bakery", "inn", "quay"],
-        "tomas": ["cliff_path", "quay", "bakery"],
-        "mara": ["boathouse", "quay", "cliff_path"],
-        "ellis": ["inn", "bakery", "quay"],
-    }.get(actor_id, [])
     adj = [e.id for e in world.exits(loc)]
-    for dest in prefer:
-        if dest in adj:
-            return ActorDecision(
-                thought="該走了。",
-                action=action_from_dict({"type": "move", "to": dest}),
-            )
     if others:
         t = others[0]
-        speech = {
-            "lena": "你見著張渡沒有？風不等人。",
-            "tomas": "聲小些。船的事還沒完。",
-            "mara": "舢板不會自己走。昨夜碼頭是誰？",
-            "ellis": "我有耐性，直到沒有。還錢，或者簽字。",
-        }.get(actor_id, "天色怪。")
         return ActorDecision(
             thought="開口。",
-            action=InteractAction(text=f"對{t['name']}道：{speech}"),
+            action=InteractAction(text=f"對{t['name']}道：天色怪。"),
         )
     if adj:
         return ActorDecision(
