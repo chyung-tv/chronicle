@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -105,20 +106,20 @@ def test_tick_command_accepts_without_waiting(tmp_path, monkeypatch):
     barrier = threading.Event()
     released = threading.Event()
 
+    orig = Simulation.tick
+
+    def blocked(self, *a, **k):
+        self.world.set_activity("thinking", detail="held")
+        barrier.set()
+        released.wait(timeout=8)
+        self.world.set_activity("idle")
+        return {"ok": True}
+
+    monkeypatch.setattr(Simulation, "tick", blocked)
+
     with TestClient(appmod.app) as client:
         story = _harbors(client)
         sid = story["id"]
-        rec = appmod.get_store().require(sid)
-        sim = appmod.get_runtime().get(rec)
-
-        def blocked(*_a, **_k):
-            sim.world.set_activity("thinking", detail="held")
-            barrier.set()
-            released.wait(timeout=8)
-            sim.world.set_activity("idle")
-            return {"ok": True}
-
-        monkeypatch.setattr(sim, "tick", blocked)
         r = client.post(f"/api/stories/{sid}/tick")
         assert r.status_code == 200
         assert r.json() == {"accepted": True}
@@ -128,10 +129,15 @@ def test_tick_command_accepts_without_waiting(tmp_path, monkeypatch):
         snap = client.get(f"/api/stories/{sid}/state").json()
         assert snap["activity"] == "thinking"
         released.set()
-        for t in list(appmod._workers):
-            t.join(timeout=15)
-        snap = client.get(f"/api/stories/{sid}/state").json()
-        assert snap["activity"] == "idle"
+        idle = None
+        for _ in range(50):
+            idle = client.get(f"/api/stories/{sid}/state").json()
+            if idle["activity"] == "idle":
+                break
+            time.sleep(0.1)
+        assert idle is not None
+        assert idle["activity"] == "idle"
+    monkeypatch.setattr(Simulation, "tick", orig)
     appmod.close_runtime()
 
 
@@ -153,13 +159,22 @@ def test_reset_unseals_to_draft(tmp_path, monkeypatch):
 
 
 def test_reset_409_when_busy(tmp_path, monkeypatch):
+    from playout.canon import World
+
     _env(tmp_path, monkeypatch)
     with TestClient(appmod.app) as client:
         story = _harbors(client)
-        rec = appmod.get_store().require(story["id"])
-        sim = appmod.get_runtime().get(rec)
-        sim.world.set_activity("thinking", detail="held")
+        store = appmod.get_store()
+        world = World(
+            store.canon_ref(story["id"]), database_url=store.database_url
+        )
+        world.set_activity("thinking", detail="held")
+        world.close()
         r = client.post(f"/api/stories/{story['id']}/reset")
         assert r.status_code == 409
-        sim.world.set_activity("idle")
+        world = World(
+            store.canon_ref(story["id"]), database_url=store.database_url
+        )
+        world.set_activity("idle")
+        world.close()
     appmod.close_runtime()

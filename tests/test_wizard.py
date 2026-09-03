@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 
 from fastapi.testclient import TestClient
 
@@ -89,12 +90,35 @@ def test_wizard_endpoint_overwrites_setup(tmp_path, monkeypatch):
         assert patched.status_code == 200
         wiz = client.post(f"/api/stories/{sid}/wizard")
         assert wiz.status_code == 200
-        body = wiz.json()
+        assert wiz.json() == {"accepted": True}
+        body = None
+        for _ in range(80):
+            body = client.get(f"/api/stories/{sid}").json()
+            st = (body.get("agent") or {}).get("status")
+            if st in ("done", "error", "idle") and st != "queued":
+                if st != "running":
+                    break
+            time.sleep(0.1)
+        assert body is not None
+        assert body["agent"]["status"] in ("done", "idle")
         assert body["setup"]["actors"][0]["want"]
         assert "聰明漂亮的女孩" in body["setup"]["actors"][0]["want"]
         live = next(s for s in client.get("/api/stories").json() if s["slug"] == "harbors-end")
         sealed = client.post(f"/api/stories/{live['id']}/wizard")
         assert sealed.status_code == 409
+    appmod.close_runtime()
+
+
+def test_wizard_busy_without_worker(tmp_path, monkeypatch):
+    monkeypatch.setenv("PLAYOUT_WORKER", "external")
+    _env(tmp_path, monkeypatch)
+    with TestClient(appmod.app) as client:
+        rec = client.post("/api/stories", json={"title": "新稿"}).json()
+        sid = rec["id"]
+        first = client.post(f"/api/stories/{sid}/wizard")
+        assert first.status_code == 200
+        second = client.post(f"/api/stories/{sid}/wizard")
+        assert second.status_code == 409
     appmod.close_runtime()
 
 
@@ -125,3 +149,16 @@ def test_stitch_ignores_extra_actors():
     )
     out = stitch(sketch, drafted)
     assert [a.id for a in out.actors] == ["someone"]
+
+
+def test_coerce_rewrites_illegal_object_ids():
+    from playout.wizard import _coerce_draft
+
+    sketch = empty_sketch("甲")
+    data = _coerce_draft(
+        {"objects": [{"id": "信件", "name": "信", "description": "一封信"}]},
+        sketch,
+    )
+    oid = data["objects"][0]["id"]
+    assert oid.isascii()
+    assert oid[0].islower()

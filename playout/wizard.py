@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from typing import Any
 
 from playout.llm import LLM
@@ -209,23 +211,37 @@ def _user_payload(sketch: StorySketch) -> str:
     return json.dumps(sketch.model_dump(mode="json"), ensure_ascii=False, indent=2)
 
 
-def enrich(sketch: StorySketch, llm: LLM | None = None) -> StorySetup:
+def enrich(
+    sketch: StorySketch,
+    llm: LLM | None = None,
+    on_progress: Callable[[str, float], None] | None = None,
+) -> StorySetup:
     llm = llm or LLM()
     if llm.mode != "live":
+        if on_progress:
+            on_progress("正在核對設定", 0.7)
         return mock_enrich(sketch)
+    if on_progress:
+        on_progress("正在請示語言模型", 0.4)
     data: dict[str, Any] = llm.complete_json(
         WIZARD_SYSTEM, _user_payload(sketch), strong=True
     )
     try:
         drafted = StorySetup.model_validate(_coerce_draft(data, sketch))
+        if on_progress:
+            on_progress("正在核對設定", 0.75)
         return stitch(sketch, drafted)
     except Exception:
+        if on_progress:
+            on_progress("正在請示語言模型", 0.55)
         data2 = llm.complete_json(
             WIZARD_SYSTEM,
             _user_payload(sketch) + "\n\n只回傳合法 JSON。勿增減人物或地點。",
             strong=True,
         )
         drafted = StorySetup.model_validate(_coerce_draft(data2, sketch))
+        if on_progress:
+            on_progress("正在核對設定", 0.75)
         return stitch(sketch, drafted)
 
 
@@ -263,6 +279,54 @@ def _coerce_draft(data: dict[str, Any], sketch: StorySketch) -> dict[str, Any]:
         ]
     data.setdefault("objects", [])
     data.setdefault("relationships", [])
+    data["objects"] = _sanitize_objects(data.get("objects") or [], sketch)
     data["turns_per_day_min"] = len(sketch.actors)
     data["turns_per_day_max"] = sketch.turns_per_day_max
     return data
+
+
+_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _next_obj_id(used: set[str]) -> str:
+    n = 1
+    while f"obj{n}" in used:
+        n += 1
+    return f"obj{n}"
+
+
+def _sanitize_id(raw: Any, used: set[str]) -> str:
+    text = re.sub(r"[^a-z0-9_]+", "_", str(raw or "").lower()).strip("_")
+    if not _ID_RE.match(text):
+        text = _next_obj_id(used)
+    if text in used:
+        text = _next_obj_id(used)
+    used.add(text)
+    return text
+
+
+def _sanitize_objects(objs: list[Any], sketch: StorySketch) -> list[dict[str, Any]]:
+    used = {o.id for o in sketch.objects}
+    loc_ids = {loc.id for loc in sketch.locations}
+    actor_ids = {a.id for a in sketch.actors}
+    out: list[dict[str, Any]] = []
+    for obj in objs:
+        if not isinstance(obj, dict):
+            continue
+        oid = str(obj.get("id") or "")
+        if oid in used and oid in {o.id for o in sketch.objects}:
+            used.add(oid)
+        else:
+            oid = _sanitize_id(oid, used)
+        loc = obj.get("location_id")
+        holder = obj.get("holder_id")
+        out.append(
+            {
+                **obj,
+                "id": oid,
+                "name": obj.get("name") or oid,
+                "location_id": loc if loc in loc_ids else None,
+                "holder_id": holder if holder in actor_ids else None,
+            }
+        )
+    return out
