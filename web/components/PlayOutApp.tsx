@@ -71,7 +71,7 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
           <p className="chrome-links">
             <Link href="/">故事</Link>
             {owner ? (
-              <Link href={`/s/${storyId}/design`}>世界設定</Link>
+              <Link href={`/s/${storyId}/design/review`}>世界設定</Link>
             ) : null}
           </p>
           <h1>{state.title || "演繹"}</h1>

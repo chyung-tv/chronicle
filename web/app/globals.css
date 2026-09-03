@@ -284,7 +284,8 @@ a.btn:focus-visible { outline: 2px solid var(--foam); outline-offset: 2px; }
 .design-section .hint-inline,
 .design-section .checks,
 .design-section .design-map,
-.design-section .field-hint {
+.design-section .field-hint,
+.design-section .table-wrap {
   grid-column: 1 / -1;
 }
 .design-section input,
@@ -432,6 +433,59 @@ a.btn:focus-visible { outline: 2px solid var(--foam); outline-offset: 2px; }
   letter-spacing: 0;
   text-transform: none;
   font-family: var(--body, inherit);
+}
+
+.design.review {
+  max-width: 1200px;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+.design-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.design-table th {
+  text-align: left;
+  font-family: var(--chrome);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--foam);
+  font-weight: 500;
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid #2d4c54;
+  white-space: nowrap;
+}
+.design-table td {
+  vertical-align: top;
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid #1e353b;
+  min-width: 6.5rem;
+}
+.design-table td:last-child,
+.design-table th:last-child {
+  min-width: 12rem;
+}
+.design-table textarea,
+.design-table input[type="text"],
+.design-table input[type="number"] {
+  background: #14282e;
+  border: 1px solid #4d737a;
+  color: var(--paper);
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+  width: 100%;
+  min-width: 5rem;
+}
+.design-table textarea {
+  min-height: 3.2rem;
+  resize: vertical;
+}
+.cell-read {
+  color: var(--paper);
+  white-space: pre-wrap;
 }
 
 @keyframes pulse {

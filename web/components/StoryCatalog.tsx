@@ -93,7 +93,7 @@ export function StoryCatalog() {
                 <span className="pill">尚未開演</span>
               )}
               {s.is_owner && s.status === "live" ? (
-                <Link className="btn ghost" href={`/s/${s.id}/design`}>
+                <Link className="btn ghost" href={`/s/${s.id}/design/review`}>
                   世界設定
                 </Link>
               ) : null}
