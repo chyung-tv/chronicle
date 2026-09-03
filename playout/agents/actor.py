@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, RunContext, ToolDefinition
 
 from playout.agents.model import llm_mode, openrouter_model, actor_model_name
 from playout.agents.referee import (
@@ -85,6 +85,21 @@ def format_action_return(world: World, actor_id: str, result: dict[str, Any]) ->
     if not lines:
         return "你動了，但沒有新的見聞。"
     return "你感知到：\n" + "\n".join(f"- {t}" for t in lines)
+
+
+def prepare_move(ctx: RunContext[ActorDeps], tool_def: ToolDefinition) -> ToolDefinition | None:
+    """Inject current intact exits as the only accepted `to` values."""
+    a = ctx.deps.world.actor(ctx.deps.actor_id)
+    exits = ctx.deps.world.exits(a["location_id"])
+    if not exits:
+        return None
+    ids = [e.id for e in exits]
+    schema = tool_def.parameters_json_schema
+    props = schema.setdefault("properties", {})
+    to_schema = props.setdefault("to", {"type": "string"})
+    to_schema["enum"] = ids
+    to_schema["description"] = "、".join(f"{e.id}（{e.name}）" for e in exits)
+    return tool_def
 
 
 def _activity_for(deps: ActorDeps, action: Action) -> None:
@@ -390,9 +405,9 @@ class ActorAgent:
 
         if not deps.in_encounter:
 
-            @agent.tool
+            @agent.tool(prepare=prepare_move)
             async def move(ctx: RunContext[ActorDeps], to: str) -> str:
-                """走到相鄰地點。"""
+                """走到相鄰完好地點。to 只能是當前可走的 location_id。"""
                 result = await dispatch_action_async(ctx.deps, MoveAction(to=to))
                 return format_action_return(ctx.deps.world, ctx.deps.actor_id, result)
 

@@ -62,38 +62,15 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
         return {"ok": True, "event_id": eid}
 
     if isinstance(action, MoveAction):
-        if action.to not in world.adjacent(actor["location_id"]):
-            eid = world.append_event(
-                "failed_move",
-                f"{actor['name']}無法由此前往{action.to}。",
-                actor_id=actor_id,
-                payload={"to": action.to},
-            )
-            world.perceive(eid, actor_id, "那地方並不相鄰。")
-            return {"ok": False, "event_id": eid, "reason": "not_adjacent"}
-        dest = world.location(action.to)
-        if not dest["intact"]:
-            eid = world.append_event(
-                "failed_move",
-                f"{actor['name']}見{dest['name']}已毀，無路可入。",
-                actor_id=actor_id,
-            )
-            world.perceive(eid, actor_id, f"{dest['name']}已毀。")
-            return {"ok": False, "event_id": eid, "reason": "ruined"}
-        here = actor["location_id"]
-        world.set_actor_location(actor_id, action.to)
-        eid = world.append_event(
-            "move",
-            f"{actor['name']}前往{dest['name']}。",
-            actor_id=actor_id,
-            payload={"from": here, "to": action.to},
-        )
-        for wid in _witnesses(world, here, {actor_id}):
-            world.perceive(eid, wid, f"{actor['name']}往{dest['name']}去了。")
-        world.perceive(eid, actor_id, f"你到了{dest['name']}。{dest['description']}")
-        for wid in _witnesses(world, action.to, {actor_id}):
-            world.perceive(eid, wid, f"{actor['name']}來了。")
-        return {"ok": True, "event_id": eid}
+        from playout.models import MoveIntent
+        from playout.movement import apply_move
+
+        res = apply_move(world, MoveIntent(actor_id=actor_id, to=action.to))
+        return {
+            "ok": res.ok,
+            "event_id": res.event_id,
+            "reason": res.reason,
+        }
 
     if isinstance(action, SpeakAction):
         try:
@@ -115,7 +92,17 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
             f"{actor['name']}對{target['name']}道：「{speech}」",
             actor_id=actor_id,
             target_id=action.target,
-            payload={"speech": speech},
+            payload={
+                "speech": speech,
+                "speeches": [
+                    {
+                        "speaker_id": actor_id,
+                        "hearer_id": action.target,
+                        "text": speech,
+                    }
+                ],
+                "location_id": actor["location_id"],
+            },
         )
         world.perceive(eid, actor_id, f"你對{target['name']}道：「{speech}」")
         world.perceive(eid, action.target, f"{actor['name']}對你道：「{speech}」")

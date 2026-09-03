@@ -208,7 +208,9 @@ def test_live_nested_uses_await_run_not_run_sync(tmp_path, monkeypatch):
         def instructions(self, fn):
             return fn
 
-        def tool(self, fn):
+        def tool(self, fn=None, **_kwargs):
+            if fn is None:
+                return lambda f: self.tool(f)
             self._tools[fn.__name__] = fn
             return fn
 

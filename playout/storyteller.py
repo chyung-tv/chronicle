@@ -33,7 +33,7 @@ Patch ops:
 規則：
 - 只發明從此刻起的新事實。永不改寫過去。
 - 若隕石擊中某地，毀傷該地，並傷及在場之人。
-- 寧用 rumor/broadcast，少搬人。移動只作場上調度（人群、火、呼喊）。
+- 寧用 rumor/broadcast，少搬人。move_actor 只可到該人當下相鄰且完好的地點，不可瞬移。
 detail、summary 一律繁體中文。
 """)
 
@@ -47,6 +47,9 @@ def apply_patches(world: World, plan: StorytellerPlan, *, kind: str = "world") -
 
 
 def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
+    from playout.models import MoveIntent
+    from playout.movement import apply_move
+
     op = patch.op
     if op == "destroy_location" and patch.location_id:
         loc = world.location(patch.location_id)
@@ -55,17 +58,21 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
             (patch.detail or f"{loc['name']}已毀。", patch.location_id),
         )
         occupants = world.actors_at(patch.location_id)
-        adj = world.adjacent(patch.location_id)
-        refuge = adj[0] if adj else patch.location_id
+        refuge = world.exits(patch.location_id)
+        dest = refuge[0].id if refuge else patch.location_id
         for a in occupants:
             world.set_injured(a["id"], True)
-            if refuge != patch.location_id:
-                world.set_actor_location(a["id"], refuge)
             world.perceive(
                 event_id,
                 a["id"],
                 patch.detail or f"{loc['name']}毀了。你受傷，被人趕出來。",
             )
+            if dest != patch.location_id:
+                apply_move(
+                    world,
+                    MoveIntent(actor_id=a["id"], to=dest, kind="evacuate"),
+                    event_id=event_id,
+                )
 
     elif op == "describe_location" and patch.location_id:
         world.cx.execute(
@@ -92,15 +99,16 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
                 )
 
     elif op == "move_actor" and patch.actor_id and patch.location_id:
-        a = world.actor(patch.actor_id)
-        if a["alive"]:
-            world.set_actor_location(patch.actor_id, patch.location_id)
-            dest = world.location(patch.location_id)
-            world.perceive(
-                event_id,
-                patch.actor_id,
-                patch.detail or f"你被引向{dest['name']}。",
-            )
+        apply_move(
+            world,
+            MoveIntent(
+                actor_id=patch.actor_id,
+                to=patch.location_id,
+                kind="forced",
+            ),
+            event_id=event_id,
+            detail=patch.detail or None,
+        )
 
     elif op == "add_object":
         oid = patch.object_id or re.sub(
