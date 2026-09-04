@@ -44,6 +44,7 @@ ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，須守住人格，
 用工具在世上行動。讀類工具（survey、recall）不計次數。
 改世界的工具每回合最多四次：move、interact、wait。
 interact 用自然語言寫出你此刻試圖做的事（對誰說話、取物、察看、動手、寫紙等）。
+move 的 to 可以是相鄰地名或 id，也可以是你聽說、以為存在的地方；走不到或沒有那地方時，你會感知到。
 若你點了在場之人的名，工具會先讓對方反應，再由裁判判定雙方實際做成什麼，把你能感知到的結果回給你。
 對方不理、走開、或已來回三次，這場對持即止。
 
@@ -88,17 +89,17 @@ def format_action_return(world: World, actor_id: str, result: dict[str, Any]) ->
 
 
 def prepare_move(ctx: RunContext[ActorDeps], tool_def: ToolDefinition) -> ToolDefinition | None:
-    """Inject current intact exits as the only accepted `to` values."""
+    """Describe known exits as hints. Destination is free-form."""
     a = ctx.deps.world.actor(ctx.deps.actor_id)
     exits = ctx.deps.world.exits(a["location_id"])
-    if not exits:
-        return None
-    ids = [e.id for e in exits]
     schema = tool_def.parameters_json_schema
     props = schema.setdefault("properties", {})
     to_schema = props.setdefault("to", {"type": "string"})
-    to_schema["enum"] = ids
-    to_schema["description"] = "、".join(f"{e.id}（{e.name}）" for e in exits)
+    to_schema.pop("enum", None)
+    hints = "、".join(f"{e.id}（{e.name}）" for e in exits) or "無已知出路"
+    to_schema["description"] = (
+        f"要去之處，地名或 id。已知相鄰：{hints}。也可走向你聽說或以為存在的地方。"
+    )
     return tool_def
 
 
@@ -123,7 +124,26 @@ async def _solo_or_held_interact(deps: ActorDeps, text: str) -> dict[str, Any]:
     if deps.in_encounter:
         return await _complete_held_interact(deps, text)
 
+    from playout.agents.expand import (
+        ActorWriter,
+        guess_unknown_object,
+        guess_unknown_person,
+    )
+
     counterpart = named_present_actor(world, deps.actor_id, text)
+    if not counterpart:
+        unknown_person = guess_unknown_person(world, text)
+        if unknown_person:
+            here = world.actor(deps.actor_id)["location_id"]
+            ActorWriter(deps.llm).materialize_person(
+                world, here, unknown_person, deps.actor_id
+            )
+            counterpart = named_present_actor(world, deps.actor_id, text)
+        elif guess_unknown_object(world, text):
+            here = world.actor(deps.actor_id)["location_id"]
+            ActorWriter(deps.llm).materialize_object(
+                world, here, guess_unknown_object(world, text) or "", deps.actor_id
+            )
     if (
         counterpart
         and deps.allow_encounter
@@ -407,7 +427,7 @@ class ActorAgent:
 
             @agent.tool(prepare=prepare_move)
             async def move(ctx: RunContext[ActorDeps], to: str) -> str:
-                """走到相鄰完好地點。to 只能是當前可走的 location_id。"""
+                """走到一個地方。to 可以是已知相鄰 id，或你聽說、以為存在的地名。"""
                 result = await dispatch_action_async(ctx.deps, MoveAction(to=to))
                 return format_action_return(ctx.deps.world, ctx.deps.actor_id, result)
 
