@@ -11,6 +11,7 @@ export function useWorldStream(storyId: string | null) {
   const [notLive, setNotLive] = useState(false);
   const [latch, setLatch] = useState(false);
   const genAtLatch = useRef(0);
+  const pulling = useRef(false);
 
   const apply = useCallback((data: WorldSnapshot) => {
     setState(data);
@@ -18,7 +19,8 @@ export function useWorldStream(storyId: string | null) {
   }, []);
 
   const pull = useCallback(async () => {
-    if (!storyId) return;
+    if (!storyId || pulling.current) return;
+    pulling.current = true;
     try {
       persistUser({
         id: userHeaders()["X-User-Id"],
@@ -34,6 +36,8 @@ export function useWorldStream(storyId: string | null) {
         return;
       }
       setError(msg);
+    } finally {
+      pulling.current = false;
     }
   }, [apply, storyId]);
 
@@ -69,7 +73,7 @@ export function useWorldStream(storyId: string | null) {
     };
 
     connect();
-    poll = setInterval(pull, 400);
+    poll = setInterval(pull, 2000);
     void pull();
     return () => {
       stopped = true;

@@ -64,3 +64,69 @@ def test_node_and_atmosphere(world):
     atmo = world.atmosphere()
     assert atmo.title == "港尾"
     assert atmo.weather
+
+
+class _CanonCx:
+    def __init__(self, ready: bool):
+        self.ready = ready
+        self.sqls: list[str] = []
+        self.commits = 0
+
+    def execute(self, sql, params=()):
+        self.sqls.append(sql)
+        cx = self
+
+        class Cur:
+            def fetchone(self):
+                if cx.ready and "information_schema.tables" in sql:
+                    return {"ok": 1}
+                return None
+
+            def fetchall(self):
+                if "information_schema.columns" in sql:
+                    return [{"name": "condition"}]
+                return []
+
+        return Cur()
+
+    def executescript(self, script):
+        self.sqls.append(script)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        pass
+
+
+def test_apply_postgres_canon_skips_triggers_when_ready():
+    from playout.canon import apply_postgres_canon
+
+    cx = _CanonCx(ready=True)
+    apply_postgres_canon(cx)
+    joined = "\n".join(cx.sqls)
+    assert "DROP TRIGGER" not in joined.upper()
+    assert "CREATE TRIGGER" not in joined.upper()
+    assert "CREATE OR REPLACE FUNCTION" not in joined.upper()
+
+
+def test_apply_postgres_canon_seals_new_schema():
+    from playout.canon import apply_postgres_canon
+
+    cx = _CanonCx(ready=False)
+    apply_postgres_canon(cx)
+    joined = "\n".join(cx.sqls)
+    assert "DROP TRIGGER" in joined.upper()
+    assert "CREATE TRIGGER" in joined.upper()
+    assert cx.commits >= 1
+
+
+def test_reader_snapshot_releases(world):
+    reader = world.reader()
+    try:
+        snap = reader.snapshot()
+        assert snap["title"] == "港尾"
+        cur = reader.stream_cursor()
+        assert cur[0] >= 0
+    finally:
+        reader.close()

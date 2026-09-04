@@ -182,17 +182,24 @@ def connect_postgres(
         raise RuntimeError("DATABASE_URL is not set")
     if not _SCHEMA_OK.match(schema):
         raise ValueError(f"unsafe schema name {schema!r}")
-    conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
+    # Readonly connections autocommit so SSE/state never sits idle-in-transaction
+    # (that blocks ACCESS EXCLUSIVE DDL from a worker reopening the same schema).
+    conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=readonly)
     ident = psql.Identifier(schema)
     if create_schema and schema != "public":
         conn.execute(psql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(ident))
-        conn.commit()
+        if not readonly:
+            conn.commit()
     if schema != "public":
         conn.execute(
             psql.SQL("SET search_path TO {}, public").format(ident)
         )
     if readonly:
         conn.execute("SET default_transaction_read_only = on")
+        conn.execute("SET lock_timeout = '3s'")
+        conn.execute("SET statement_timeout = '8s'")
+    if not readonly:
+        conn.commit()
     return PgConnection(conn)
 
 

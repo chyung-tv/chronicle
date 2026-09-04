@@ -207,8 +207,22 @@ def _enqueue(
     return {"accepted": True}
 
 
+def _transient_pg(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    if "lock timeout" in msg or "statement timeout" in msg:
+        return True
+    if "canceling statement" in msg or "locknotavailable" in msg:
+        return True
+    return False
+
+
 def _snapshot_for(rec: StoryRecord, user: User) -> dict[str, Any]:
-    snap = get_runtime().snapshot(rec)
+    try:
+        snap = get_runtime().snapshot(rec)
+    except Exception as e:
+        if _transient_pg(e):
+            raise HTTPException(503, "busy") from e
+        raise
     owner = is_owner(user, rec.owner_id)
     if not owner:
         snap = redact_snapshot(snap)
@@ -415,23 +429,27 @@ async def story_stream(ref: str, request: Request):
         last: tuple[Any, ...] | None = None
         try:
             while True:
+                if await request.is_disconnected():
+                    return
                 try:
-                    cursor = world.stream_cursor()
+                    cursor = await asyncio.to_thread(world.stream_cursor)
                     if cursor != last:
                         last = cursor
-                        fresh = get_store().get(rec.id)
+                        fresh = await asyncio.to_thread(get_store().get, rec.id)
                         if fresh is None or fresh.status != "live":
                             yield ": closed\n\n"
                             return
-                        snap = _snapshot_for(fresh, user)
+                        snap = await asyncio.to_thread(_snapshot_for, fresh, user)
                         yield f"data: {json.dumps(snap, ensure_ascii=False)}\n\n"
                     else:
                         yield ": keepalive\n\n"
+                except HTTPException:
+                    yield ": keepalive\n\n"
                 except Exception:
                     yield ": keepalive\n\n"
                 await asyncio.sleep(0.2)
         finally:
-            world.close()
+            await asyncio.to_thread(world.close)
 
     return StreamingResponse(
         gen(),
