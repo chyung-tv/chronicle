@@ -346,3 +346,23 @@ class Simulation:
         return self._run_locked(
             go, activity="steering", actor="steer", detail="導引醞釀中"
         )
+
+    def insert_location(self, text: str) -> dict[str, Any]:
+        from playout.agents.expand import LocationWriter
+
+        return self._run_locked(
+            lambda: LocationWriter(self.llm).insert(self.world, text),
+            activity="injecting",
+            actor="location_writer",
+            detail="插入地點中",
+        )
+
+    def insert_actor(self, text: str) -> dict[str, Any]:
+        from playout.agents.expand import ActorWriter
+
+        return self._run_locked(
+            lambda: ActorWriter(self.llm).insert(self.world, text),
+            activity="injecting",
+            actor="actor_writer",
+            detail="插入人物中",
+        )

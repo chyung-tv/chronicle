@@ -492,3 +492,37 @@ def steer(ref: str, body: TextIn, user: User = Depends(current_user)):
         actor="steer",
         payload={"text": body.text.strip()},
     )
+
+
+@app.post("/api/stories/{ref}/insert-location")
+def insert_location(ref: str, body: TextIn, user: User = Depends(current_user)):
+    rec = _story(ref)
+    _require_owner(user, rec)
+    if rec.status != "live":
+        raise HTTPException(409, "not live")
+    if not body.text.strip():
+        raise HTTPException(400, "empty")
+    return _enqueue(
+        rec,
+        "insert_location",
+        detail="插入地點中",
+        actor="location_writer",
+        payload={"text": body.text.strip()},
+    )
+
+
+@app.post("/api/stories/{ref}/insert-actor")
+def insert_actor(ref: str, body: TextIn, user: User = Depends(current_user)):
+    rec = _story(ref)
+    _require_owner(user, rec)
+    if rec.status != "live":
+        raise HTTPException(409, "not live")
+    if not body.text.strip():
+        raise HTTPException(400, "empty")
+    return _enqueue(
+        rec,
+        "insert_actor",
+        detail="插入人物中",
+        actor="actor_writer",
+        payload={"text": body.text.strip()},
+    )
