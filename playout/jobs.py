@@ -45,7 +45,7 @@ IDLE_AGENT = {
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 def _parse_ts(raw: str | None) -> datetime | None:
@@ -256,14 +256,15 @@ def active_job(store: StoryStore, story_id: str) -> dict[str, Any] | None:
 
 def latest_job(store: StoryStore, story_id: str) -> dict[str, Any] | None:
     row = store.cx.execute(
-        "SELECT * FROM jobs WHERE story_id=? ORDER BY created_at DESC LIMIT 1",
+        """SELECT * FROM jobs WHERE story_id=?
+           ORDER BY created_at DESC, started_at DESC, id DESC LIMIT 1""",
         (story_id,),
     ).fetchone()
     return _row(row) if row else None
 
 
 def agent_state(store: StoryStore, story_id: str) -> dict[str, Any]:
-    return agent_from_job(latest_job(store, story_id))
+    return agent_from_job(active_job(store, story_id) or latest_job(store, story_id))
 
 
 def story_busy(store: StoryStore, story_id: str) -> bool:

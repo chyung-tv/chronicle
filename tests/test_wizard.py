@@ -79,14 +79,18 @@ def test_actor_cap():
         assert "8" in str(e)
 
 
-def _wait_agent(client: TestClient, sid: str) -> dict:
+def _wait_agent(client: TestClient, sid: str, *, want: str | None = None) -> dict:
     body = None
     for _ in range(80):
         body = client.get(f"/api/stories/{sid}").json()
         st = (body.get("agent") or {}).get("status")
-        if st in ("done", "error", "idle") and st != "queued":
-            if st != "running":
-                break
+        if st in ("queued", "running"):
+            time.sleep(0.1)
+            continue
+        if want is None or want in (body.get("setup") or {}).get("actors", [{}])[0].get(
+            "want", ""
+        ):
+            return body
         time.sleep(0.1)
     assert body is not None
     return body
@@ -104,7 +108,7 @@ def test_wizard_endpoint_overwrites_setup(tmp_path, monkeypatch):
         wiz = client.post(f"/api/stories/{sid}/wizard")
         assert wiz.status_code == 200
         assert wiz.json() == {"accepted": True}
-        body = _wait_agent(client, sid)
+        body = _wait_agent(client, sid, want="聰明漂亮的女孩")
         assert body["agent"]["status"] in ("done", "idle")
         assert body["setup"]["actors"][0]["want"]
         assert "聰明漂亮的女孩" in body["setup"]["actors"][0]["want"]
@@ -124,7 +128,7 @@ def test_wizard_rerun_after_done_overwrites_setup(tmp_path, monkeypatch):
         client.patch(f"/api/stories/{sid}", json={"sketch": sketch})
         first = client.post(f"/api/stories/{sid}/wizard")
         assert first.status_code == 200
-        body = _wait_agent(client, sid)
+        body = _wait_agent(client, sid, want="聰明漂亮的女孩")
         assert body["agent"]["status"] in ("done", "idle")
         assert "聰明漂亮的女孩" in body["setup"]["actors"][0]["want"]
         sketch["actors"][0]["note"] = "欠債的麵包師傅"
@@ -132,7 +136,7 @@ def test_wizard_rerun_after_done_overwrites_setup(tmp_path, monkeypatch):
         assert patched.status_code == 200
         second = client.post(f"/api/stories/{sid}/wizard")
         assert second.status_code == 200
-        body = _wait_agent(client, sid)
+        body = _wait_agent(client, sid, want="欠債的麵包師傅")
         assert body["agent"]["status"] in ("done", "idle")
         assert "欠債的麵包師傅" in body["setup"]["actors"][0]["want"]
         assert "聰明漂亮的女孩" not in body["setup"]["actors"][0]["want"]
