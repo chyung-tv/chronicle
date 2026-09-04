@@ -282,7 +282,27 @@ def migrate_canon_columns(cx: Any) -> None:
     cx.commit()
 
 
+def _postgres_canon_ready(cx: Any) -> bool:
+    try:
+        row = cx.execute(
+            """SELECT 1 AS ok FROM information_schema.tables
+               WHERE table_schema = current_schema() AND table_name = 'meta'"""
+        ).fetchone()
+        return row is not None
+    except Exception:
+        try:
+            cx.rollback()
+        except Exception:
+            pass
+        return False
+
+
 def apply_postgres_canon(cx: Any) -> None:
+    # Re-running DROP/CREATE TRIGGER takes ACCESS EXCLUSIVE and deadlocks with
+    # the play page's long-lived SSE reader. Only seal a brand-new schema.
+    if _postgres_canon_ready(cx):
+        migrate_canon_columns(cx)
+        return
     cx.executescript(PG_TABLES)
     cx.execute(PG_SEAL_FN)
     for name, table, event in PG_SEAL_TRIGGERS:
@@ -361,6 +381,15 @@ class World:
     def close(self) -> None:
         self.cx.close()
 
+    def _release_read(self) -> None:
+        """End a readonly snapshot so we never sit idle-in-transaction."""
+        if not self.readonly:
+            return
+        try:
+            self.cx.commit()
+        except Exception:
+            pass
+
     def reader(self) -> "World":
         """Second connection. Safe to snapshot while the writer is in OpenRouter."""
         return World(
@@ -394,7 +423,7 @@ class World:
             return int(row["m"])
 
         plan = self.get_day_plan() or {}
-        return (
+        cursor = (
             _max("events"),
             _max("diaries"),
             _max("chapters"),
@@ -405,6 +434,8 @@ class World:
             self.meta("activity_detail") or "",
             self.meta("activity_error") or "",
         )
+        self._release_read()
+        return cursor
 
     def meta(self, key: str, default: str | None = None) -> str | None:
         row = self.cx.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
@@ -1085,7 +1116,7 @@ class World:
         edges = [
             {"a": e["a"], "b": e["b"]} for e in self.cx.execute("SELECT * FROM edges")
         ]
-        return {
+        result = {
             "title": self.meta("title"),
             "worldview": self.meta("worldview"),
             "day": self.day,
@@ -1114,6 +1145,8 @@ class World:
             "chapters": chapters,
             "intents": intents,
         }
+        self._release_read()
+        return result
 
 
 def unlink_db(db_path: str | Path, *, database_url: str | None = None) -> None:

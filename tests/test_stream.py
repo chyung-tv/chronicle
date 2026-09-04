@@ -178,3 +178,20 @@ def test_reset_409_when_busy(tmp_path, monkeypatch):
         world.set_activity("idle")
         world.close()
     appmod.close_runtime()
+
+
+def test_state_lock_timeout_is_503(tmp_path, monkeypatch):
+    from playout.runtime import StoryRuntime
+
+    _env(tmp_path, monkeypatch)
+
+    def boom(self, rec):
+        raise RuntimeError("canceling statement due to lock timeout")
+
+    monkeypatch.setattr(StoryRuntime, "snapshot", boom)
+    with TestClient(appmod.app) as client:
+        story = _harbors(client)
+        r = client.get(f"/api/stories/{story['id']}/state")
+        assert r.status_code == 503
+        assert r.json()["detail"] == "busy"
+    appmod.close_runtime()
