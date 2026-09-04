@@ -39,7 +39,7 @@ def test_quay_exits_exclude_cliff(world):
     assert "cliff_path" not in ids
 
 
-def test_prepare_move_enum_from_quay(world):
+def test_prepare_move_describes_exits_without_enum(world):
     deps = ActorDeps(world=world, llm=LLM(), actor_id="tomas")
     ctx = SimpleNamespace(deps=deps)
     tool_def = SimpleNamespace(
@@ -47,9 +47,13 @@ def test_prepare_move_enum_from_quay(world):
     )
     out = prepare_move(ctx, tool_def)
     assert out is not None
-    enum = out.parameters_json_schema["properties"]["to"]["enum"]
-    assert set(enum) == {"bakery", "inn", "boathouse"}
-    assert "cliff_path" not in enum
+    to_schema = out.parameters_json_schema["properties"]["to"]
+    assert "enum" not in to_schema
+    desc = to_schema["description"]
+    assert "bakery" in desc
+    assert "inn" in desc
+    assert "boathouse" in desc
+    assert "cliff_path" not in desc
 
 
 def test_resolver_illegal_hop_stays_put(world):

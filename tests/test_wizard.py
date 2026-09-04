@@ -79,6 +79,23 @@ def test_actor_cap():
         assert "8" in str(e)
 
 
+def test_location_cap():
+    sketch = empty_sketch("廣")
+    extra = [
+        {"id": f"loc{i}", "name": f"處{i}", "note": "", "x": 0, "y": 0}
+        for i in range(2, 10)
+    ]
+    try:
+        StorySketch(
+            title="廣",
+            locations=[sketch.locations[0], *extra],
+            actors=sketch.actors,
+        )
+        raise AssertionError("expected cap")
+    except Exception as e:
+        assert "8" in str(e)
+
+
 def test_wizard_endpoint_overwrites_setup(tmp_path, monkeypatch):
     _env(tmp_path, monkeypatch)
     with TestClient(appmod.app) as client:
@@ -122,33 +139,40 @@ def test_wizard_busy_without_worker(tmp_path, monkeypatch):
     appmod.close_runtime()
 
 
-def test_stitch_ignores_extra_actors():
+def test_stitch_appends_extra_actors_and_locations():
     sketch = empty_sketch("甲")
-    fat = empty_setup("甲")
-    fat.actors.append(
-        fat.actors[0].model_copy(update={"id": "intruder", "name": "闖入者"})
-    )
-    # empty_setup validator would reject 2 actors with same... wait we changed id
-    from playout.models import ActorSetup
+    from playout.models import ActorSetup, LocationSetup
 
     drafted = empty_setup("甲")
     drafted = drafted.model_copy(
         update={
+            "locations": [
+                drafted.locations[0],
+                LocationSetup(
+                    id="side",
+                    name="側巷",
+                    description="一條窄巷。",
+                    x=320,
+                    y=200,
+                ),
+            ],
             "actors": [
                 drafted.actors[0],
                 ActorSetup(
                     id="intruder",
                     name="闖入者",
-                    location="place",
+                    location="side",
                     voice="x",
                     want="x",
                     constitution="x",
                 ),
-            ]
+            ],
         }
     )
     out = stitch(sketch, drafted)
-    assert [a.id for a in out.actors] == ["someone"]
+    assert [a.id for a in out.actors] == ["someone", "intruder"]
+    assert [loc.id for loc in out.locations] == ["place", "side"]
+    assert any(set(e) == {"place", "side"} for e in out.edges)
 
 
 def test_coerce_rewrites_illegal_object_ids():
