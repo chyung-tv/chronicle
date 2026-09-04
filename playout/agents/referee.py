@@ -21,6 +21,7 @@ from playout.models import (
     MoveAction,
     ObjectMutation,
     PerceptionOut,
+    REFEREE_SKIP_OPS,
     RefereeVerdict,
     SpeakAction,
     TakeAction,
@@ -370,7 +371,7 @@ def apply_verdict(
             else:
                 failed_moves.append(res)
             continue
-        if op == "destroy_location":
+        if op in REFEREE_SKIP_OPS:
             continue
         # Other patches (objects, rumor, weather…) need an event id; apply after seal.
 
@@ -562,8 +563,7 @@ def apply_verdict(
             "kill_actor",
             "injure_actor",
             "move_actor",
-            "destroy_location",
-        ):
+        ) or patch.op in REFEREE_SKIP_OPS:
             continue
         _apply_patch(world, eid, patch)
 

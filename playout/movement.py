@@ -52,8 +52,8 @@ def evaluate_move(world: World, intent: MoveIntent) -> MoveResolution:
             dest_name=dest_name,
             kind=intent.kind,
             reason="unknown_dest",
-            summary=f"{actor['name']}無法由此前往{dest_id}。",
-            self_perception="那地方並不相鄰。",
+            summary=f"{actor['name']}找不到{dest_name}。",
+            self_perception="沒有那地方。",
         )
 
     if dest_id == here:

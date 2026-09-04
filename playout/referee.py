@@ -62,10 +62,10 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
         return {"ok": True, "event_id": eid}
 
     if isinstance(action, MoveAction):
+        from playout.agents.expand import resolve_move
         from playout.models import MoveIntent
-        from playout.movement import apply_move
 
-        res = apply_move(world, MoveIntent(actor_id=actor_id, to=action.to))
+        res = resolve_move(world, MoveIntent(actor_id=actor_id, to=action.to))
         return {
             "ok": res.ok,
             "event_id": res.event_id,

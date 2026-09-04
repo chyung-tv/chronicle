@@ -106,6 +106,16 @@ def test_non_owner_forbidden(tmp_path, monkeypatch):
             f"/api/stories/{sid}/steer", json={"text": "讓她走"}, headers=headers
         ).status_code == 403
         assert client.post(
+            f"/api/stories/{sid}/insert-location",
+            json={"text": "蘋果店"},
+            headers=headers,
+        ).status_code == 403
+        assert client.post(
+            f"/api/stories/{sid}/insert-actor",
+            json={"text": "掌櫃"},
+            headers=headers,
+        ).status_code == 403
+        assert client.post(
             f"/api/stories/{sid}/reset", headers=headers
         ).status_code == 403
         assert client.patch(
@@ -200,4 +210,40 @@ def test_non_owner_snapshot_redacts_secrets(tmp_path, monkeypatch):
             headers={"X-User-Id": "stranger"},
         ).json()["setup"]
         assert all(not a.get("secret") for a in setup["actors"])
+    appmod.close_runtime()
+
+
+def test_owner_insert_jobs_accepted(tmp_path, monkeypatch):
+    import time
+
+    with _client(tmp_path, monkeypatch) as client:
+        rec = client.post("/api/stories", json={"title": "可擴"}).json()
+        sid = rec["id"]
+        client.post(f"/api/stories/{sid}/start")
+        loc = client.post(
+            f"/api/stories/{sid}/insert-location", json={"text": "側巷"}
+        )
+        assert loc.status_code == 200
+        assert loc.json().get("accepted") is True
+        snap = None
+        for _ in range(80):
+            snap = client.get(f"/api/stories/{sid}/state").json()
+            loc_names = [a["name"] for a in snap.get("locations") or []]
+            if "側巷" in loc_names and snap.get("activity") == "idle":
+                break
+            time.sleep(0.1)
+        actor = client.post(
+            f"/api/stories/{sid}/insert-actor", json={"text": "路人"}
+        )
+        assert actor.status_code == 200
+        assert actor.json().get("accepted") is True
+        for _ in range(80):
+            snap = client.get(f"/api/stories/{sid}/state").json()
+            people = [a["name"] for a in snap.get("actors") or []]
+            if "路人" in people:
+                break
+            time.sleep(0.1)
+        assert snap is not None
+        loc_names = [a["name"] for a in snap["locations"]]
+        assert "側巷" in loc_names
     appmod.close_runtime()

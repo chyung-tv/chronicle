@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-import re
-from typing import Any
+from typing import Any, Iterable
 
 from playout.canon import World
+from playout.ids import slugify
 from playout.llm import LLM
-from playout.models import Patch, StorytellerPlan
+from playout.models import (
+    MAX_ACTORS,
+    MAX_LOCATIONS,
+    Patch,
+    StorytellerPlan,
+)
 from playout.zh import with_prose
 
 STORYTELLER_SYSTEM = with_prose("""你把人寫的世界事件，變成封閉正史模擬可用的補丁。
@@ -20,30 +25,62 @@ STORYTELLER_SYSTEM = with_prose("""你把人寫的世界事件，變成封閉正
 Patch ops:
 {"op":"destroy_location","location_id":"...","detail":"..."}
 {"op":"describe_location","location_id":"...","detail":"new description"}
-{"op":"injure_actor","actor_id":"...","detail":"..."}
-{"op":"kill_actor","actor_id":"...","detail":"..."}  // only if the event itself kills (meteor, collapse)
+{"op":"add_location","location_id":"...","name":"...","detail":"...","x":0,"y":0,"connect_to":"..."}
+{"op":"add_edge","location_id":"...","connect_to":"..."}
+{"op":"injure_actor","actor_id":"...","detail":"...","condition":"左臂受傷"}
+{"op":"kill_actor","actor_id":"...","detail":"..."}
+{"op":"edit_actor","actor_id":"...","detail":"...","condition":"...","mood":"..."}
+{"op":"add_actor","actor_id":"...","name":"...","location_id":"...","voice":"...","want":"...","secret":"...","constitution":"...","mood":"...","detail":"..."}
 {"op":"move_actor","actor_id":"...","location_id":"...","detail":"environmental reason they are drawn/forced"}
 {"op":"add_object","object_id":"...","name":"...","location_id":"...","detail":"description","hidden":false}
+{"op":"describe_object","object_id":"...","detail":"new description"}
 {"op":"destroy_object","object_id":"...","detail":"..."}
 {"op":"reveal_object","object_id":"...","detail":"..."}
 {"op":"rumor","actor_ids":["id"],"detail":"what they hear/see now"}
-{"op":"broadcast","location_id":"...","detail":"everyone here perceives this"}  // location_id "*" for all living
+{"op":"broadcast","location_id":"...","detail":"everyone here perceives this"}
 {"op":"set_weather","detail":"..."}
 
 規則：
 - 只發明從此刻起的新事實。永不改寫過去。
-- 若隕石擊中某地，毀傷該地，並傷及在場之人。
+- 毀傷某地時，必須是事件文裡點名的既有地點。不可預設某一處。
 - 寧用 rumor/broadcast，少搬人。move_actor 只可到該人當下相鄰且完好的地點，不可瞬移。
 detail、summary 一律繁體中文。
 """)
 
 
-def apply_patches(world: World, plan: StorytellerPlan, *, kind: str = "world") -> int:
+def apply_patches(
+    world: World,
+    plan: StorytellerPlan,
+    *,
+    kind: str = "world",
+    allow: Iterable[str] | None = None,
+) -> int:
+    allowed = set(allow) if allow is not None else None
     eid = world.append_event(kind, plan.summary)
     for patch in plan.patches:
+        if allowed is not None and patch.op not in allowed:
+            continue
         _apply_patch(world, eid, patch)
     world.cx.commit()
     return eid
+
+
+def _add_edge(world: World, a: str, b: str) -> None:
+    if not a or not b or a == b:
+        return
+    try:
+        world.location(a)
+        world.location(b)
+    except Exception:
+        return
+    world.cx.execute(
+        "INSERT INTO edges(a, b) VALUES(?,?) ON CONFLICT(a, b) DO NOTHING",
+        (a, b),
+    )
+    world.cx.execute(
+        "INSERT INTO edges(a, b) VALUES(?,?) ON CONFLICT(a, b) DO NOTHING",
+        (b, a),
+    )
 
 
 def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
@@ -52,7 +89,10 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
 
     op = patch.op
     if op == "destroy_location" and patch.location_id:
-        loc = world.location(patch.location_id)
+        try:
+            loc = world.location(patch.location_id)
+        except Exception:
+            return
         world.cx.execute(
             "UPDATE locations SET intact=0, description=? WHERE id=?",
             (patch.detail or f"{loc['name']}已毀。", patch.location_id),
@@ -75,17 +115,82 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
                 )
 
     elif op == "describe_location" and patch.location_id:
+        try:
+            world.location(patch.location_id)
+        except Exception:
+            return
         world.cx.execute(
             "UPDATE locations SET description=? WHERE id=?",
             (patch.detail, patch.location_id),
         )
 
+    elif op == "add_location":
+        if world.location_count() >= MAX_LOCATIONS:
+            return
+        loc_id = patch.location_id or slugify(
+            patch.name or "place", "loc", world.used_location_ids()
+        )
+        existing = None
+        try:
+            existing = world.location(loc_id)
+        except Exception:
+            existing = None
+        if existing:
+            if patch.detail:
+                world.cx.execute(
+                    "UPDATE locations SET description=? WHERE id=?",
+                    (patch.detail, loc_id),
+                )
+            if patch.name:
+                world.cx.execute(
+                    "UPDATE locations SET name=? WHERE id=?",
+                    (patch.name, loc_id),
+                )
+        else:
+            origin = None
+            if patch.connect_to:
+                try:
+                    origin = world.location(patch.connect_to)
+                except Exception:
+                    origin = None
+            x = patch.x
+            y = patch.y
+            if x is None:
+                x = float(origin["x"] + 80) if origin else 270.0
+            if y is None:
+                y = float(origin["y"] + 40) if origin else 180.0
+            world.cx.execute(
+                "INSERT INTO locations(id, name, description, intact, x, y) VALUES(?,?,?,?,?,?)",
+                (
+                    loc_id,
+                    patch.name or loc_id,
+                    patch.detail or patch.name or loc_id,
+                    1,
+                    x,
+                    y,
+                ),
+            )
+        if patch.connect_to:
+            _add_edge(world, loc_id, patch.connect_to)
+
+    elif op == "add_edge" and patch.location_id and patch.connect_to:
+        _add_edge(world, patch.location_id, patch.connect_to)
+
     elif op == "injure_actor" and patch.actor_id:
-        world.set_injured(patch.actor_id, True)
+        try:
+            world.actor(patch.actor_id)
+        except Exception:
+            return
+        world.set_injured(
+            patch.actor_id, True, condition=patch.condition or patch.detail
+        )
         world.perceive(event_id, patch.actor_id, patch.detail or "你受傷了。")
 
     elif op == "kill_actor" and patch.actor_id:
-        a = world.actor(patch.actor_id)
+        try:
+            a = world.actor(patch.actor_id)
+        except Exception:
+            return
         world.set_alive(patch.actor_id, False)
         world.append_event(
             "world_kill",
@@ -97,6 +202,77 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
                 world.perceive(
                     event_id, other["id"], patch.detail or f"{a['name']}死了。"
                 )
+
+    elif op == "edit_actor" and patch.actor_id:
+        try:
+            world.actor(patch.actor_id)
+        except Exception:
+            return
+        if patch.voice:
+            world.cx.execute(
+                "UPDATE actors SET voice=? WHERE id=?", (patch.voice, patch.actor_id)
+            )
+        if patch.want:
+            world.cx.execute(
+                "UPDATE actors SET want=? WHERE id=?", (patch.want, patch.actor_id)
+            )
+        if patch.secret:
+            world.cx.execute(
+                "UPDATE actors SET secret=? WHERE id=?", (patch.secret, patch.actor_id)
+            )
+        if patch.constitution:
+            world.cx.execute(
+                "UPDATE actors SET constitution=? WHERE id=?",
+                (patch.constitution, patch.actor_id),
+            )
+        if patch.mood:
+            world.set_actor_mood(patch.actor_id, patch.mood[:40])
+        if patch.condition:
+            world.set_injured(patch.actor_id, True, condition=patch.condition)
+        elif patch.detail:
+            world.set_injured(patch.actor_id, True, condition=patch.detail)
+        if patch.detail:
+            world.perceive(event_id, patch.actor_id, patch.detail)
+
+    elif op == "add_actor":
+        if world.actor_count() >= MAX_ACTORS:
+            return
+        aid = patch.actor_id or slugify(
+            patch.name or "npc", "npc", world.used_actor_ids()
+        )
+        try:
+            world.actor(aid)
+            return
+        except Exception:
+            pass
+        loc_id = patch.location_id
+        if not loc_id:
+            home = world.cx.execute("SELECT id FROM locations LIMIT 1").fetchone()
+            loc_id = home["id"] if home else None
+        if not loc_id:
+            return
+        try:
+            world.location(loc_id)
+        except Exception:
+            return
+        world.cx.execute(
+            """INSERT INTO actors(id, name, voice, want, secret, constitution, location_id, goal, mood, alive, injured, condition)
+               VALUES(?,?,?,?,?,?,?,?,?,1,0,?)""",
+            (
+                aid,
+                patch.name or aid,
+                patch.voice or "尚未定腔。",
+                patch.want or patch.detail or "尚未定願。",
+                patch.secret or "",
+                patch.constitution or patch.detail or "尚未定性。",
+                loc_id,
+                patch.goal or patch.want or patch.detail or "尚未定願。",
+                patch.mood or "靜",
+                patch.condition or "",
+            ),
+        )
+        if patch.detail:
+            world.perceive(event_id, aid, patch.detail)
 
     elif op == "move_actor" and patch.actor_id and patch.location_id:
         apply_move(
@@ -111,8 +287,8 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
         )
 
     elif op == "add_object":
-        oid = patch.object_id or re.sub(
-            r"[^a-z0-9]+", "_", (patch.name or "object").lower()
+        oid = patch.object_id or slugify(
+            patch.name or "object", "obj", world.used_object_ids()
         )
         world.cx.execute(
             """INSERT INTO objects(id, name, description, location_id, holder_id, hidden, destroyed)
@@ -132,6 +308,20 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
                 1 if patch.hidden else 0,
             ),
         )
+
+    elif op == "describe_object" and patch.object_id:
+        obj = world.object(patch.object_id)
+        if not obj:
+            return
+        world.cx.execute(
+            "UPDATE objects SET description=? WHERE id=?",
+            (patch.detail or obj["description"], patch.object_id),
+        )
+        if patch.name:
+            world.cx.execute(
+                "UPDATE objects SET name=? WHERE id=?",
+                (patch.name, patch.object_id),
+            )
 
     elif op == "destroy_object" and patch.object_id:
         world.cx.execute(
@@ -172,12 +362,7 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
 
 def _heuristic_event(world: World, text: str) -> StorytellerPlan:
     t = text.lower()
-    locs = list(world.cx.execute("SELECT * FROM locations"))
-    hit = None
-    for loc in locs:
-        if loc["id"] in t or loc["name"].lower() in t or loc["name"] in text:
-            hit = loc
-            break
+    hit = world.find_location(text)
     disaster = (
         "meteor",
         "strike",
@@ -191,17 +376,25 @@ def _heuristic_event(world: World, text: str) -> StorytellerPlan:
         "大火",
         "爆炸",
         "墜",
+        "毀",
     )
     if any(w in t or w in text for w in disaster):
-        loc = hit or world.location("quay")
-        occupants = world.actors_at(loc["id"])
+        if not hit:
+            return StorytellerPlan(
+                summary=text.strip(),
+                patches=[
+                    Patch(op="set_weather", detail=text.strip() or "天色驟變。"),
+                    Patch(op="broadcast", location_id="*", detail=text.strip()),
+                ],
+            )
+        occupants = world.actors_at(hit["id"])
         patches = [
-            Patch(op="destroy_location", location_id=loc["id"], detail=text.strip()),
-            Patch(op="set_weather", detail="煙氣與燙風自水面來"),
+            Patch(op="destroy_location", location_id=hit["id"], detail=text.strip()),
+            Patch(op="set_weather", detail="煙塵與熱風。"),
             Patch(
                 op="broadcast",
                 location_id="*",
-                detail=f"{loc['name']}一震：{text.strip()}",
+                detail=f"{hit['name']}一震：{text.strip()}",
             ),
         ]
         for a in occupants:
@@ -210,20 +403,24 @@ def _heuristic_event(world: World, text: str) -> StorytellerPlan:
             )
         return StorytellerPlan(summary=text.strip(), patches=patches)
     if any(w in t or w in text for w in ("storm", "颱風", "風暴", "暴雨")):
-        return StorytellerPlan(
-            summary=text.strip(),
-            patches=[
-                Patch(op="set_weather", detail="風提早到了：雨如礫，海水漫過碼頭"),
-                Patch(op="broadcast", location_id="*", detail=text.strip()),
+        patches = [
+            Patch(op="set_weather", detail=text.strip() or "風雨大作。"),
+            Patch(op="broadcast", location_id="*", detail=text.strip()),
+        ]
+        if hit:
+            patches.append(
                 Patch(
                     op="describe_location",
-                    location_id="quay",
-                    detail="浪砸碼頭。空繩在風裡抽。",
-                ),
-            ],
-        )
+                    location_id=hit["id"],
+                    detail=f"{hit['name']}裡風雨大作。{text.strip()}",
+                )
+            )
+        return StorytellerPlan(summary=text.strip(), patches=patches)
     if any(w in t or w in text for w in ("letter", "note", "信", "紙條")):
-        loc_id = hit["id"] if hit else "bakery"
+        loc = hit or world.cx.execute(
+            "SELECT * FROM locations ORDER BY id LIMIT 1"
+        ).fetchone()
+        loc_id = loc["id"] if loc else None
         return StorytellerPlan(
             summary=text.strip(),
             patches=[
@@ -235,10 +432,13 @@ def _heuristic_event(world: World, text: str) -> StorytellerPlan:
                     detail=text.strip(),
                     hidden=False,
                 ),
-                Patch(op="broadcast", location_id=loc_id, detail="一封信攤在明處。"),
+                Patch(
+                    op="broadcast",
+                    location_id=loc_id or "*",
+                    detail="一封信攤在明處。",
+                ),
             ],
         )
-    # generic: everyone at a mentioned place, else all, perceives it
     loc_id = hit["id"] if hit else "*"
     return StorytellerPlan(
         summary=text.strip(),
