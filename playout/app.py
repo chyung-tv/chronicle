@@ -429,8 +429,11 @@ async def story_stream(ref: str, request: Request):
         last: tuple[Any, ...] | None = None
         try:
             while True:
-                if await request.is_disconnected():
-                    return
+                try:
+                    if await request.is_disconnected():
+                        return
+                except RuntimeError:
+                    pass
                 try:
                     cursor = await asyncio.to_thread(world.stream_cursor)
                     if cursor != last:
