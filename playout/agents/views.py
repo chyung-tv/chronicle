@@ -43,6 +43,7 @@ class ActorView(BaseModel):
     mood: str = ""
     injured: bool = False
     alive: bool = True
+    condition: str = ""
     location: LocationNode
     inventory: list[ObjectView] = Field(default_factory=list)
     relations: list[RelationView] = Field(default_factory=list)
@@ -95,6 +96,7 @@ def actor_view(world: World, actor_id: str, extra: str = "") -> ActorView:
         mood=a["mood"],
         injured=bool(a["injured"]),
         alive=bool(a["alive"]),
+        condition=(a["condition"] if "condition" in a.keys() else "") or "",
         location=node,
         inventory=[
             ObjectView(id=o["id"], name=o["name"], description=o["description"])
@@ -147,7 +149,7 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
 你的秘密（他人不知，除非已聞）：{a.secret}
 眼前之願（屬你）：{a.goal}
 心境：{a.mood}
-帶傷：{a.injured}
+帶傷：{a.injured}{("（" + a.condition + "）") if a.condition else ""}
 
 此地：{loc.name}（{loc.id}）。{loc.description}
 完好：{loc.intact}
@@ -155,7 +157,7 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
 可見之物：{obj_s}
 隨身：{inv_s}
 相鄰：{", ".join(exits) or "無"}
-可走（move 的 to）：{", ".join(walkable) or "無"}
+已知可走：{", ".join(walkable) or "無"}。move 也可走向你聽說或以為存在的地方。
 
 關係：
 {rel_s}

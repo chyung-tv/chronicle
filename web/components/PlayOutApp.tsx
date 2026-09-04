@@ -12,6 +12,8 @@ import { useWorldStream } from "@/hooks/useWorldStream";
 import {
   postDay,
   postInject,
+  postInsertActor,
+  postInsertLocation,
   postReset,
   postSteer,
   postTick,
@@ -166,6 +168,12 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
           busy={busy}
           onInject={(text) => runCommand(() => postInject(storyId, text))}
           onSteer={(text) => runCommand(() => postSteer(storyId, text))}
+          onInsertLocation={(text) =>
+            runCommand(() => postInsertLocation(storyId, text))
+          }
+          onInsertActor={(text) =>
+            runCommand(() => postInsertActor(storyId, text))
+          }
         />
       ) : null}
     </>

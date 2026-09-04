@@ -73,6 +73,10 @@ def _run_live(store: StoryStore, job: dict[str, Any]) -> None:
             sim.inject(str(payload.get("text") or ""))
         elif kind == "steer":
             sim.steer(str(payload.get("text") or ""))
+        elif kind == "insert_location":
+            sim.insert_location(str(payload.get("text") or ""))
+        elif kind == "insert_actor":
+            sim.insert_actor(str(payload.get("text") or ""))
         else:
             raise RuntimeError(f"unknown job kind {kind}")
         jobs.finish(store, job["id"], status="done", detail="完成")

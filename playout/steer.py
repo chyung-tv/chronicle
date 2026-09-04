@@ -9,7 +9,7 @@ from typing import Any
 from playout import sql as dbsql
 from playout.canon import World
 from playout.llm import LLM
-from playout.models import Patch, SteerCampaign, SteerRung, StorytellerPlan
+from playout.models import Patch, STEER_OPS, SteerCampaign, SteerRung, StorytellerPlan
 from playout.storyteller import apply_patches
 from playout.zh import with_prose
 
@@ -24,6 +24,7 @@ STEER_SYSTEM = with_prose("""你是封閉正史模擬的戲場總管。
 
 你可以：
 - 添物件、流言、環境牽引、揭開隱藏的設定物件
+- 新增地點與人物（add_location、add_edge、add_actor），讓未來變得可能
 - 不可用傷害當捷徑
 - 使用已有的願、秘密、舊怨
 
@@ -40,8 +41,8 @@ STEER_SYSTEM = with_prose("""你是封閉正史模擬的戲場總管。
   ]
 }
 
-Patch ops: rumor, broadcast, add_object, reveal_object, move_actor, describe_location, set_weather.
-Steer 戰役禁用 kill_actor、injure_actor。
+Patch ops: rumor, broadcast, add_object, describe_object, reveal_object, move_actor, describe_location, set_weather, add_location, add_edge, add_actor.
+Steer 戰役禁用 kill_actor、injure_actor、edit_actor、destroy_location。
 injection.summary 與 patch.detail 一律繁體中文。
 """)
 
@@ -99,8 +100,89 @@ def _parse_pair(text: str, actors: list[dict]) -> tuple[str | None, str | None]:
     return a_id, b_id
 
 
+def _heuristic_spawn(
+    world: World, text: str, locs: list[dict]
+) -> SteerCampaign | None:
+    from playout.ids import slugify
+
+    if world.find_location(text) or world.find_actor(text):
+        return None
+    shop = any(w in text.lower() or w in text for w in ("店", "鋪", "舖", "shop", "store"))
+    person = any(w in text for w in ("店員", "路人", "掌櫃", "新角色"))
+    if not shop and not person:
+        return None
+    origin = locs[0]["id"] if locs else ""
+    name = text.strip()[:20] or "新處"
+    loc_id = slugify(name, "loc", {r["id"] for r in locs})
+    patches: list[Patch] = []
+    if shop and origin:
+        patches.append(
+            Patch(
+                op="add_location",
+                location_id=loc_id,
+                name=name,
+                detail=text.strip(),
+                connect_to=origin,
+            )
+        )
+        patches.append(
+            Patch(
+                op="rumor",
+                actor_ids=[a["id"] for a in world.living_actors()],
+                detail=f"你聽說附近有{name}。",
+            )
+        )
+    if person:
+        aid = slugify("npc", "npc", world.used_actor_ids())
+        patches.append(
+            Patch(
+                op="add_actor",
+                actor_id=aid,
+                name="路人",
+                location_id=loc_id if shop and origin else origin,
+                detail="一個尚未深識的人出現了。",
+            )
+        )
+    if not patches:
+        return None
+    return SteerCampaign(
+        summary=text.strip() or "世界裂出一條新縫。",
+        success_predicates=[],
+        failure_predicates=[],
+        rungs=[
+            SteerRung(
+                id="motive",
+                kind="motive",
+                injection=StorytellerPlan(summary="新處將現。", patches=patches),
+            ),
+            SteerRung(
+                id="means",
+                kind="means",
+                injection=StorytellerPlan(summary="風聲傳開。", patches=[]),
+            ),
+            SteerRung(
+                id="opportunity",
+                kind="opportunity",
+                injection=StorytellerPlan(summary="路開了。", patches=[]),
+            ),
+            SteerRung(
+                id="escalation",
+                kind="escalation",
+                injection=StorytellerPlan(summary="壓力上來了。", patches=[]),
+            ),
+        ],
+    )
+
+
 def _heuristic_campaign(world: World, text: str) -> SteerCampaign:
     actors = _index_actors(world)
+    locs = [
+        {"id": l["id"], "name": l["name"]}
+        for l in world.cx.execute("SELECT id,name FROM locations")
+    ]
+    spawn = _heuristic_spawn(world, text, locs)
+    if spawn:
+        return spawn
     a_id, b_id = _parse_pair(text, actors)
     if not a_id:
         a_id = actors[0]["id"]
@@ -263,17 +345,10 @@ def _eval_predicates(world: World, preds: list[str]) -> bool:
 
 
 def _forbidden_ops(campaign: SteerCampaign) -> SteerCampaign:
-    allowed = {
-        "rumor",
-        "broadcast",
-        "add_object",
-        "reveal_object",
-        "move_actor",
-        "describe_location",
-        "set_weather",
-    }
     for rung in campaign.rungs:
-        rung.injection.patches = [p for p in rung.injection.patches if p.op in allowed]
+        rung.injection.patches = [
+            p for p in rung.injection.patches if p.op in STEER_OPS
+        ]
     return campaign
 
 

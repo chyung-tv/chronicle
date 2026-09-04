@@ -90,3 +90,35 @@ def test_forbidden_ops_stripped(world):
     )
     cleaned = _forbidden_ops(bad)
     assert all(p.op != "kill_actor" for p in cleaned.rungs[0].injection.patches)
+    assert any(p.op == "rumor" for p in cleaned.rungs[0].injection.patches)
+
+
+def test_forbidden_ops_keeps_spawn():
+    from playout.models import Patch, SteerCampaign, SteerRung, StorytellerPlan
+    from playout.steer import _forbidden_ops
+
+    camp = SteerCampaign(
+        summary="x",
+        rungs=[
+            SteerRung(
+                id="motive",
+                kind="motive",
+                injection=StorytellerPlan(
+                    summary="shop",
+                    patches=[
+                        Patch(
+                            op="add_location",
+                            location_id="shop",
+                            name="店",
+                            connect_to="quay",
+                        ),
+                        Patch(op="destroy_location", location_id="quay", detail="no"),
+                    ],
+                ),
+            )
+        ],
+    )
+    cleaned = _forbidden_ops(camp)
+    ops = [p.op for p in cleaned.rungs[0].injection.patches]
+    assert "add_location" in ops
+    assert "destroy_location" not in ops

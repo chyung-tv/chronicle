@@ -81,6 +81,20 @@ export function postSteer(storyId: string, text: string) {
   });
 }
 
+export function postInsertLocation(storyId: string, text: string) {
+  return command(`/api/stories/${storyId}/insert-location`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export function postInsertActor(storyId: string, text: string) {
+  return command(`/api/stories/${storyId}/insert-actor`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
 export function postStart(storyId: string) {
   return api<StoryDetail>(`/api/stories/${storyId}/start`, { method: "POST" });
 }
