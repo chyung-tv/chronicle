@@ -144,6 +144,12 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
 
   const wizard = async () => {
     if (!story || readonly) return;
+    if (
+      hasDraft &&
+      !window.confirm("再請巫師會覆寫定稿。速寫保留。繼續？")
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -152,6 +158,7 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
       await postWizard(story.id);
       const rec = await waitForWizard(story.id, setStory);
       setSketch(clone(rec.sketch));
+      setHasDraft(true);
       if (rec.agent?.status === "error") {
         throw new Error(rec.agent.error || "巫師失敗");
       }
@@ -259,7 +266,7 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
           <p className="sub">
             {readonly
               ? "世界已封。速寫只讀。定稿在另一頁。"
-              : "寫速寫，送交巫師。補完後到定稿表核對，不再重跑巫師。"}
+              : "寫速寫，送交巫師。補完後到定稿表核對。不滿意可改速寫，再請巫師覆寫定稿。"}
           </p>
         </div>
         <div className="controls">
@@ -268,15 +275,14 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
               <button type="button" disabled={busy} onClick={() => save()}>
                 儲存速寫
               </button>
+              <button type="button" disabled={busy} onClick={wizard}>
+                {hasDraft ? "再請巫師" : "送交巫師"}
+              </button>
               {hasDraft ? (
-                <Link className="btn" href={`/s/${story.id}/design/review`}>
+                <Link className="btn ghost" href={`/s/${story.id}/design/review`}>
                   查看定稿
                 </Link>
-              ) : (
-                <button type="button" disabled={busy} onClick={wizard}>
-                  送交巫師
-                </button>
-              )}
+              ) : null}
             </>
           ) : (
             <Link className="btn" href={`/s/${story.id}/design/review`}>

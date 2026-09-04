@@ -79,6 +79,19 @@ def test_actor_cap():
         assert "8" in str(e)
 
 
+def _wait_agent(client: TestClient, sid: str) -> dict:
+    body = None
+    for _ in range(80):
+        body = client.get(f"/api/stories/{sid}").json()
+        st = (body.get("agent") or {}).get("status")
+        if st in ("done", "error", "idle") and st != "queued":
+            if st != "running":
+                break
+        time.sleep(0.1)
+    assert body is not None
+    return body
+
+
 def test_wizard_endpoint_overwrites_setup(tmp_path, monkeypatch):
     _env(tmp_path, monkeypatch)
     with TestClient(appmod.app) as client:
@@ -91,21 +104,38 @@ def test_wizard_endpoint_overwrites_setup(tmp_path, monkeypatch):
         wiz = client.post(f"/api/stories/{sid}/wizard")
         assert wiz.status_code == 200
         assert wiz.json() == {"accepted": True}
-        body = None
-        for _ in range(80):
-            body = client.get(f"/api/stories/{sid}").json()
-            st = (body.get("agent") or {}).get("status")
-            if st in ("done", "error", "idle") and st != "queued":
-                if st != "running":
-                    break
-            time.sleep(0.1)
-        assert body is not None
+        body = _wait_agent(client, sid)
         assert body["agent"]["status"] in ("done", "idle")
         assert body["setup"]["actors"][0]["want"]
         assert "聰明漂亮的女孩" in body["setup"]["actors"][0]["want"]
         live = next(s for s in client.get("/api/stories").json() if s["slug"] == "harbors-end")
         sealed = client.post(f"/api/stories/{live['id']}/wizard")
         assert sealed.status_code == 409
+    appmod.close_runtime()
+
+
+def test_wizard_rerun_after_done_overwrites_setup(tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    with TestClient(appmod.app) as client:
+        rec = client.post("/api/stories", json={"title": "新稿"}).json()
+        sid = rec["id"]
+        sketch = rec["sketch"]
+        sketch["actors"][0]["note"] = "聰明漂亮的女孩"
+        client.patch(f"/api/stories/{sid}", json={"sketch": sketch})
+        first = client.post(f"/api/stories/{sid}/wizard")
+        assert first.status_code == 200
+        body = _wait_agent(client, sid)
+        assert body["agent"]["status"] in ("done", "idle")
+        assert "聰明漂亮的女孩" in body["setup"]["actors"][0]["want"]
+        sketch["actors"][0]["note"] = "欠債的麵包師傅"
+        patched = client.patch(f"/api/stories/{sid}", json={"sketch": sketch})
+        assert patched.status_code == 200
+        second = client.post(f"/api/stories/{sid}/wizard")
+        assert second.status_code == 200
+        body = _wait_agent(client, sid)
+        assert body["agent"]["status"] in ("done", "idle")
+        assert "欠債的麵包師傅" in body["setup"]["actors"][0]["want"]
+        assert "聰明漂亮的女孩" not in body["setup"]["actors"][0]["want"]
     appmod.close_runtime()
 
 
