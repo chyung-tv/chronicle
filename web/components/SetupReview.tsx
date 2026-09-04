@@ -173,12 +173,15 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
           <p className="sub">
             {readonly
               ? "世界已封。此表即開演時的設定 JSON，只讀。"
-              : "巫師依速寫寫下的定稿。改格子即可，不必再跑巫師。確認後開始演繹。"}
+              : "巫師依速寫寫下的定稿。改格子即可。若要重寫，回速寫補筆再請巫師，會覆寫此表。確認後開始演繹。"}
           </p>
         </div>
         <div className="controls">
           {!readonly ? (
             <>
+              <Link className="btn ghost" href={`/s/${story.id}/design`}>
+                回速寫
+              </Link>
               <button type="button" disabled={busy} onClick={confirm}>
                 確認定稿
               </button>

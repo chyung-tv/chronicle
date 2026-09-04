@@ -27,7 +27,7 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The catalog lists stories. Enter a live board at `/s/{id}`; the owner designs a draft at `/s/{id}/design`. The Next app rewrites `/api/*` to FastAPI on [http://127.0.0.1:8765](http://127.0.0.1:8765) (`PLAYOUT_API_ORIGIN` to override). `/api/auth/*` is reserved for better-auth / Auth.js later (Next `afterFiles` rewrite).
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The catalog lists stories. Enter a live board at `/s/{id}`; the owner designs a draft at `/s/{id}/design`. **送交巫師** enriches the sketch into `/s/{id}/design/review`. Until the story is live, the owner can go back to the sketch, edit, and **再請巫師** — that run overwrites the review table. The Next app rewrites `/api/*` to FastAPI on [http://127.0.0.1:8765](http://127.0.0.1:8765) (`PLAYOUT_API_ORIGIN` to override). `/api/auth/*` is reserved for better-auth / Auth.js later (Next `afterFiles` rewrite).
 
 Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731). Agents are [pydantic-ai](https://ai.pydantic.dev/) `Agent`s (`OpenRouterModel`); set `PLAYOUT_LLM_MODE=mock` to force heuristics even when a key is present.
 
