@@ -91,10 +91,15 @@ class Patch(BaseModel):
     op: Literal[
         "destroy_location",
         "describe_location",
+        "add_location",
+        "add_edge",
         "injure_actor",
         "kill_actor",
         "move_actor",
+        "add_actor",
+        "edit_actor",
         "add_object",
+        "describe_object",
         "destroy_object",
         "reveal_object",
         "rumor",
@@ -108,6 +113,16 @@ class Patch(BaseModel):
     name: str | None = None
     detail: str = ""
     hidden: bool = False
+    x: float | None = None
+    y: float | None = None
+    connect_to: str | None = None
+    voice: str | None = None
+    want: str | None = None
+    secret: str | None = None
+    constitution: str | None = None
+    mood: str | None = None
+    condition: str | None = None
+    goal: str | None = None
 
 
 class PerceptionOut(BaseModel):
@@ -242,7 +257,54 @@ class MoveResolution(BaseModel):
 
 
 MAX_ACTORS = 8
+MAX_LOCATIONS = 8
 MAX_TURNS_PER_DAY = 8
+
+LOCATION_WRITER_OPS = frozenset(
+    {
+        "add_location",
+        "add_edge",
+        "describe_location",
+        "destroy_location",
+        "add_object",
+        "describe_object",
+        "destroy_object",
+        "reveal_object",
+    }
+)
+ACTOR_WRITER_OPS = frozenset(
+    {
+        "add_actor",
+        "edit_actor",
+        "injure_actor",
+        "kill_actor",
+        "rumor",
+    }
+)
+STEER_OPS = frozenset(
+    {
+        "rumor",
+        "broadcast",
+        "add_object",
+        "describe_object",
+        "reveal_object",
+        "move_actor",
+        "describe_location",
+        "set_weather",
+        "add_location",
+        "add_edge",
+        "add_actor",
+    }
+)
+REFEREE_SKIP_OPS = frozenset(
+    {
+        "destroy_location",
+        "add_location",
+        "add_edge",
+        "add_actor",
+        "edit_actor",
+    }
+)
 
 
 class LocationSetup(BaseModel):
@@ -347,6 +409,8 @@ class StorySetup(BaseModel):
             raise ValueError("at least one actor")
         if len(actor_ids) > MAX_ACTORS:
             raise ValueError(f"at most {MAX_ACTORS} actors")
+        if len(loc_ids) > MAX_LOCATIONS:
+            raise ValueError(f"at most {MAX_LOCATIONS} locations")
         loc_set = set(loc_ids)
         actor_set = set(actor_ids)
         obj_ids = [obj.id for obj in self.objects]
@@ -403,6 +467,8 @@ class StorySketch(BaseModel):
             raise ValueError("at least one actor")
         if len(actor_ids) > MAX_ACTORS:
             raise ValueError(f"at most {MAX_ACTORS} actors")
+        if len(loc_ids) > MAX_LOCATIONS:
+            raise ValueError(f"at most {MAX_LOCATIONS} locations")
         loc_set = set(loc_ids)
         actor_set = set(actor_ids)
         _, self.turns_per_day_max = _clamp_turns(

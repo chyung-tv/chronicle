@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS actors (
     mood TEXT NOT NULL,
     alive INTEGER NOT NULL DEFAULT 1,
     injured INTEGER NOT NULL DEFAULT 0,
+    condition TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
@@ -156,6 +157,7 @@ CREATE TABLE IF NOT EXISTS actors (
     mood TEXT NOT NULL,
     alive INTEGER NOT NULL DEFAULT 1,
     injured INTEGER NOT NULL DEFAULT 0,
+    condition TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
@@ -253,6 +255,33 @@ PG_SEAL_TRIGGERS = (
 )
 
 
+def _table_columns(cx: Any, table: str) -> set[str]:
+    try:
+        rows = cx.execute(
+            """SELECT column_name AS name FROM information_schema.columns
+               WHERE table_name=? AND table_schema=current_schema()""",
+            (table,),
+        ).fetchall()
+        if rows:
+            return {str(r["name"]) for r in rows}
+    except Exception:
+        pass
+    try:
+        rows = cx.execute(f"PRAGMA table_info({table})").fetchall()
+        return {str(r["name"]) for r in rows}
+    except Exception:
+        return set()
+
+
+def migrate_canon_columns(cx: Any) -> None:
+    cols = _table_columns(cx, "actors")
+    if cols and "condition" not in cols:
+        cx.execute(
+            "ALTER TABLE actors ADD COLUMN condition TEXT NOT NULL DEFAULT ''"
+        )
+    cx.commit()
+
+
 def apply_postgres_canon(cx: Any) -> None:
     cx.executescript(PG_TABLES)
     cx.execute(PG_SEAL_FN)
@@ -263,6 +292,7 @@ def apply_postgres_canon(cx: Any) -> None:
                 BEFORE {event} ON {table}
                 FOR EACH ROW EXECUTE PROCEDURE playout_canon_sealed()"""
         )
+    migrate_canon_columns(cx)
     cx.commit()
 
 
@@ -325,6 +355,7 @@ class World:
             return
         self.cx.executescript(SCHEMA)
         apply_sqlite_seals(self.cx)
+        migrate_canon_columns(self.cx)
         self.cx.commit()
 
     def close(self) -> None:
@@ -512,8 +543,8 @@ class World:
             )
         for act in scenario["actors"]:
             self.cx.execute(
-                """INSERT INTO actors(id, name, voice, want, secret, constitution, location_id, goal, mood, alive, injured)
-                   VALUES(?,?,?,?,?,?,?,?,?,1,0)""",
+                """INSERT INTO actors(id, name, voice, want, secret, constitution, location_id, goal, mood, alive, injured, condition)
+                   VALUES(?,?,?,?,?,?,?,?,?,1,0,?)""",
                 (
                     act["id"],
                     act["name"],
@@ -524,6 +555,7 @@ class World:
                     act["location"],
                     act.get("goal", act["want"]),
                     act.get("mood", "uneasy"),
+                    act.get("condition") or "",
                 ),
             )
         for obj in scenario.get("objects", []):
@@ -630,6 +662,86 @@ class World:
         if not row:
             raise CanonError(f"unknown location {loc_id}")
         return row
+
+    def location_count(self) -> int:
+        row = self.cx.execute("SELECT COUNT(*) AS n FROM locations").fetchone()
+        return int(row["n"])
+
+    def actor_count(self) -> int:
+        row = self.cx.execute("SELECT COUNT(*) AS n FROM actors").fetchone()
+        return int(row["n"])
+
+    def used_location_ids(self) -> set[str]:
+        return {r["id"] for r in self.cx.execute("SELECT id FROM locations")}
+
+    def used_actor_ids(self) -> set[str]:
+        return {r["id"] for r in self.cx.execute("SELECT id FROM actors")}
+
+    def used_object_ids(self) -> set[str]:
+        return {r["id"] for r in self.cx.execute("SELECT id FROM objects")}
+
+    def find_location(self, text: str) -> Any | None:
+        t = (text or "").strip()
+        if not t:
+            return None
+        row = self.cx.execute("SELECT * FROM locations WHERE id=?", (t,)).fetchone()
+        if row:
+            return row
+        low = t.lower()
+        row = self.cx.execute("SELECT * FROM locations WHERE id=?", (low,)).fetchone()
+        if row:
+            return row
+        locs = list(self.cx.execute("SELECT * FROM locations"))
+        for loc in locs:
+            if loc["name"] == t:
+                return loc
+        locs.sort(key=lambda loc: len(loc["name"] or ""), reverse=True)
+        for loc in locs:
+            name = loc["name"] or ""
+            if len(name) >= 2 and name in t:
+                return loc
+        return None
+
+    def find_actor(self, text: str) -> Any | None:
+        t = (text or "").strip()
+        if not t:
+            return None
+        try:
+            return self.actor(t)
+        except CanonError:
+            pass
+        try:
+            return self.actor(t.lower())
+        except CanonError:
+            pass
+        actors = list(self.cx.execute("SELECT * FROM actors"))
+        for a in actors:
+            if a["name"] == t:
+                return a
+        actors.sort(key=lambda a: len(a["name"] or ""), reverse=True)
+        for a in actors:
+            name = a["name"] or ""
+            if len(name) >= 2 and name in t:
+                return a
+        return None
+
+    def find_object(self, text: str) -> Any | None:
+        t = (text or "").strip()
+        if not t:
+            return None
+        row = self.cx.execute("SELECT * FROM objects WHERE id=?", (t,)).fetchone()
+        if row:
+            return row
+        objs = list(self.cx.execute("SELECT * FROM objects"))
+        for obj in objs:
+            if obj["name"] == t:
+                return obj
+        objs.sort(key=lambda o: len(o["name"] or ""), reverse=True)
+        for obj in objs:
+            name = obj["name"] or ""
+            if len(name) >= 2 and name in t:
+                return obj
+        return None
 
     def living_actors(self) -> list[Any]:
         return list(self.cx.execute("SELECT * FROM actors WHERE alive=1 ORDER BY id"))
@@ -790,9 +902,24 @@ class World:
         self.cx.execute("UPDATE actors SET mood=? WHERE id=?", (mood, actor_id))
         self.cx.commit()
 
-    def set_injured(self, actor_id: str, injured: bool) -> None:
+    def set_injured(
+        self, actor_id: str, injured: bool, condition: str | None = None
+    ) -> None:
+        if condition is not None:
+            self.cx.execute(
+                "UPDATE actors SET injured=?, condition=? WHERE id=?",
+                (1 if injured else 0, condition, actor_id),
+            )
+        else:
+            self.cx.execute(
+                "UPDATE actors SET injured=? WHERE id=?",
+                (1 if injured else 0, actor_id),
+            )
+        self.cx.commit()
+
+    def set_actor_condition(self, actor_id: str, condition: str) -> None:
         self.cx.execute(
-            "UPDATE actors SET injured=? WHERE id=?", (1 if injured else 0, actor_id)
+            "UPDATE actors SET condition=? WHERE id=?", (condition, actor_id)
         )
         self.cx.commit()
 
@@ -904,6 +1031,7 @@ class World:
                 "mood": a["mood"],
                 "alive": bool(a["alive"]),
                 "injured": bool(a["injured"]),
+                "condition": a["condition"] if "condition" in a.keys() else "",
                 "inventory": inv,
             })
         events = [
