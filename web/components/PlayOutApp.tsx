@@ -50,7 +50,7 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
       <header className="masthead">
         <div className="mast-title">
           <h1>演繹</h1>
-          <p className="sub">{error || "載入世界…"}</p>
+          <p className="sub">{error || "載入中…"}</p>
         </div>
       </header>
     );
@@ -65,13 +65,15 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
 
   const owner = !!state.is_owner;
   const god = !!state.can_god;
+  const tick = !!state.can_tick;
 
   return (
     <>
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
-            <Link href="/">故事</Link>
+            <Link href="/">目錄</Link>
+            <Link href={`/s/${storyId}?room=reading`}>閱覽室</Link>
             {owner ? (
               <Link href={`/s/${storyId}/design/review`}>世界設定</Link>
             ) : null}
@@ -80,20 +82,24 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
           <p className="sub">{beatClock(state)}</p>
         </div>
         <div className="controls">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => runCommand(() => postTick(storyId))}
-          >
-            演一步
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => runCommand(() => postDay(storyId))}
-          >
-            演完今日
-          </button>
+          {tick ? (
+            <>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => runCommand(() => postTick(storyId))}
+              >
+                演一步
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => runCommand(() => postDay(storyId))}
+              >
+                演完今日
+              </button>
+            </>
+          ) : null}
           {owner ? (
             <button
               type="button"
@@ -102,7 +108,7 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
               onClick={() => {
                 if (
                   !confirm(
-                    "這會銷毀已發生的事件帶，故事回到未開演，方可再改世界設定。此控制日後將移除。"
+                    "會清掉已發生的事，故事退回未開演，之後才能改設定。這按鈕之後會拿掉。"
                   )
                 ) {
                   return;
@@ -122,12 +128,12 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
           <span className={`pill${busy ? " busy" : ""}`}>{activityText}</span>
         </div>
         {error ? <p className="banner">{error}</p> : null}
-        <RunStrip state={state} />
+        {tick ? <RunStrip state={state} /> : null}
       </header>
 
       <main className="workspace">
         <section className="panel stage" aria-labelledby="stage-h">
-          <h2 id="stage-h">鎮</h2>
+          <h2 id="stage-h">地圖</h2>
           <TownMap state={state} onSelect={setSelected} />
           <p className="weather">{state.weather}</p>
         </section>
@@ -139,14 +145,14 @@ export function PlayOutApp({ storyId }: { storyId: string }) {
               className={tab === "tape" ? "on" : ""}
               onClick={() => setTab("tape")}
             >
-              事件帶
+              紀錄
             </button>
             <button
               type="button"
               className={tab === "chapters" ? "on" : ""}
               onClick={() => setTab("chapters")}
             >
-              章回
+              章節
             </button>
           </div>
           {tab === "tape" ? (

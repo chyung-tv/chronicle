@@ -50,7 +50,7 @@ export function Chapters({ state }: { state: WorldSnapshot }) {
   const nameOf = (id: string) =>
     state.actors.find((a) => a.id === id)?.name || id;
   if (!state.chapters.length) {
-    return <p className="entry">章回於一日終了時寫成。</p>;
+    return <p className="entry">一日完結後才會寫成章節。</p>;
   }
   return (
     <>

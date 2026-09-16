@@ -122,6 +122,8 @@ export type WorldSnapshot = {
   slug?: string;
   is_owner?: boolean;
   can_god?: boolean;
+  can_tick?: boolean;
+  visibility?: "public" | "private";
 };
 
 export type LocationSketch = {
@@ -225,16 +227,20 @@ export type StoryCard = {
   owner_id: string;
   is_owner: boolean;
   status: "draft" | "live";
+  visibility: "public" | "private";
   day: number | null;
   actor_count: number;
   location_count: number;
   created_at: string;
   updated_at: string;
+  can_tick?: boolean;
+  can_god?: boolean;
 };
 
 export type StoryDetail = StoryCard & {
   editable: boolean;
   can_god: boolean;
+  can_tick: boolean;
   setup: StorySetup;
   sketch: StorySketch;
   agent?: AgentState;

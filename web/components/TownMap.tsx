@@ -44,7 +44,7 @@ export function TownMap({
       className="map"
       viewBox="0 0 540 360"
       role="img"
-      aria-label="鎮圖"
+      aria-label="地圖"
       dangerouslySetInnerHTML={{ __html: edges + nodes }}
       onClick={(ev) => {
         const t = ev.target as SVGElement;

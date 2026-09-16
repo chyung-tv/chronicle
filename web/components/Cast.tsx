@@ -6,10 +6,12 @@ export function Cast({
   state,
   selected,
   onSelect,
+  publicView = false,
 }: {
   state: WorldSnapshot;
   selected: string | null;
   onSelect: (id: string) => void;
+  publicView?: boolean;
 }) {
   const current =
     state.actors.find((x) => x.id === selected) || state.actors[0];
@@ -38,15 +40,17 @@ export function Cast({
           </h3>
           <p className="entry">
             <b>所在</b> {locName(current.location_id)} · <b>心境</b>{" "}
-            {current.mood}
+            {current.mood || "—"}
           </p>
           <p className="entry">
-            <b>眼前之願</b> {current.goal}
+            <b>目前目標</b> {current.goal || "—"}
           </p>
-          <p className="entry">
-            <b>深願</b> {current.want}
-          </p>
-          {current.secret ? (
+          {current.want ? (
+            <p className="entry">
+              <b>一直想要</b> {current.want}
+            </p>
+          ) : null}
+          {!publicView && current.secret ? (
             <p className="entry">
               <b>秘密</b> {current.secret}
             </p>
@@ -63,7 +67,7 @@ export function Cast({
               </p>
             ))
           ) : (
-            <p className="entry">（空白）</p>
+            <p className="entry">還沒有日記。</p>
           )}
         </div>
       ) : null}

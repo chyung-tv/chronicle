@@ -34,12 +34,14 @@ def test_harbors_end_setup_validates():
     assert "storm_in_days" not in setup.model_dump()
 
 
-def test_me_returns_dev_user(tmp_path, monkeypatch):
+def test_me_returns_guest_and_public_harbors(tmp_path, monkeypatch):
+    from tests.conftest import OWNER_HEADERS
+
     with _client(tmp_path, monkeypatch) as client:
         r = client.get("/api/me")
         assert r.status_code == 200
         body = r.json()
-        assert body["id"] == "dev-owner"
+        assert body["id"] == "audience"
         assert body["name"]
         assert "playout_user=" in r.headers.get("set-cookie", "")
     appmod.close_runtime()
@@ -50,10 +52,13 @@ def test_me_returns_dev_user(tmp_path, monkeypatch):
         assert s["slug"] == "harbors-end"
         assert s["title"] == "港尾"
         assert s["status"] == "live"
-        assert s["is_owner"] is True
+        assert s["visibility"] == "public"
+        assert s["is_owner"] is False
         snap = client.get(f"/api/stories/{s['id']}/state").json()
         assert snap["title"] == "港尾"
         assert len(snap["actors"]) == 4
+        owned = client.get("/api/stories", headers=OWNER_HEADERS).json()[0]
+        assert owned["is_owner"] is True
     appmod.close_runtime()
 
 
@@ -126,7 +131,7 @@ def test_non_owner_forbidden(tmp_path, monkeypatch):
             client.post(
                 f"/api/stories/{created['id']}/start", headers=headers
             ).status_code
-            == 403
+            == 404
         )
     appmod.close_runtime()
 
@@ -194,11 +199,15 @@ def test_duplicate_live_is_editable_draft(tmp_path, monkeypatch):
 
 
 def test_non_owner_snapshot_redacts_secrets(tmp_path, monkeypatch):
+    from tests.conftest import OWNER_HEADERS
+
     with _client(tmp_path, monkeypatch) as client:
         live = next(
             s for s in client.get("/api/stories").json() if s["slug"] == "harbors-end"
         )
-        owner = client.get(f"/api/stories/{live['id']}/state").json()
+        owner = client.get(
+            f"/api/stories/{live['id']}/state", headers=OWNER_HEADERS
+        ).json()
         assert any(a.get("secret") for a in owner["actors"])
         stranger = client.get(
             f"/api/stories/{live['id']}/state",

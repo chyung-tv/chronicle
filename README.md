@@ -27,13 +27,13 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The catalog lists stories. Enter a live board at `/s/{id}`; the owner designs a draft at `/s/{id}/design`. **送交巫師** enriches the sketch into `/s/{id}/design/review`. Until the story is live, the owner can go back to the sketch, edit, and **再請巫師** — that run overwrites the review table. The Next app rewrites `/api/*` to FastAPI on [http://127.0.0.1:8765](http://127.0.0.1:8765) (`PLAYOUT_API_ORIGIN` to override). `/api/auth/*` is reserved for better-auth / Auth.js later (Next `afterFiles` rewrite).
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The catalog splits **公開演繹** (港尾 is the public live demo) from **我的草稿**. Readers open a live story in the 閱覽室: **閱讀** (chapters + public tape) or **探看** (map, cast, diaries, goals, moods). The owner still uses the writer's room at `/s/{id}` (god rail, tick/day). Drafts are designed at `/s/{id}/design`. **送交巫師** enriches the sketch into `/s/{id}/design/review`. Until the story is live, the owner can go back to the sketch, edit, and **再請巫師** — that run overwrites the review table. The Next app rewrites `/api/*` to FastAPI on [http://127.0.0.1:8765](http://127.0.0.1:8765) (`PLAYOUT_API_ORIGIN` to override). `/api/auth/*` is reserved for better-auth / Auth.js later (Next `afterFiles` rewrite).
 
 Without an API key the sim uses a heuristic mock LLM so the loop still runs. For live models, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. Default model is `deepseek/deepseek-v4-flash-0731` via [OpenRouter](https://openrouter.ai/deepseek/deepseek-v4-flash-0731). Agents are [pydantic-ai](https://ai.pydantic.dev/) `Agent`s (`OpenRouterModel`); set `PLAYOUT_LLM_MODE=mock` to force heuristics even when a key is present.
 
-The play UI subscribes to `GET /api/stories/{id}/stream`. `POST /api/stories/{id}/tick` enqueues a job and returns `{accepted: true}`; the tape updates as the worker commits.
+The play UI subscribes to `GET /api/stories/{id}/stream`. Only the owner may `POST /api/stories/{id}/tick` or `/day`; there is no auto-advance. The job returns `{accepted: true}` and the tape updates as the worker commits.
 
-Auth is stubbed (`X-User-Id` / cookie / `PLAYOUT_DEV_USER_ID`, default `dev-owner`). Session helpers in `playout/auth.py` and `web/lib/auth.ts` are the swap point for better-auth or Auth.js.
+Auth is stubbed so owner ≠ audience: unsigned visitors are `audience` / a generated guest (`X-User-Id` / cookie). Harbor's End is owned by `PLAYOUT_DEV_USER_ID` (default `dev-owner`). Session helpers in `playout/auth.py` and `web/lib/auth.ts` are the swap point for better-auth or Auth.js.
 
 ## Catalog and files
 
