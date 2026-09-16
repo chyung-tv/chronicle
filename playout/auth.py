@@ -40,7 +40,12 @@ def get_user(request: Request | None = None) -> User:
     if not uid:
         uid = GUEST_USER_ID
         name = name or GUEST_USER_NAME
-    return User(id=uid, name=name or uid)
+    if not name:
+        if uid == GUEST_USER_ID or uid.startswith("guest-"):
+            name = GUEST_USER_NAME
+        else:
+            name = uid
+    return User(id=uid, name=name)
 
 
 def is_owner(user: User, owner_id: str) -> bool:

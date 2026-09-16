@@ -70,7 +70,12 @@ def test_redact_snapshot_keeps_inspect_fields_strips_owner_only():
     assert snap["intents"]
 
 
-def test_unsigned_me_is_audience_not_owner(tmp_path, monkeypatch):
+def test_guest_uuid_display_name_is_visitor(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as client:
+        me = client.get("/api/me", headers={"X-User-Id": "guest-abc"}).json()
+        assert me["id"] == "guest-abc"
+        assert me["name"] == "訪客"
+    appmod.close_runtime()
     with _client(tmp_path, monkeypatch) as client:
         me = client.get("/api/me").json()
         assert me["id"] == "audience"
