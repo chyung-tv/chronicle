@@ -14,9 +14,9 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from playout.auth import DEV_USER_ID, User, can_god, get_user, is_owner
+from playout.auth import DEV_USER_ID, User, can_god, can_tick, get_user, is_owner
 from playout.models import StorySetup, StorySketch, empty_setup, empty_sketch
-from playout.privacy import redact_setup, redact_snapshot, redact_sketch
+from playout.privacy import is_public_live, redact_setup, redact_snapshot, redact_sketch
 from playout.runtime import StoryRuntime
 from playout.store import (
     AlreadyDraft,
@@ -132,6 +132,18 @@ def _require_owner(user: User, rec: StoryRecord) -> None:
         raise HTTPException(403, "not owner")
 
 
+def _audience_may_see(user: User, rec: StoryRecord) -> bool:
+    if is_owner(user, rec.owner_id):
+        return True
+    return is_public_live(rec.visibility, rec.status)
+
+
+def _require_visible(user: User, rec: StoryRecord) -> StoryRecord:
+    if not _audience_may_see(user, rec):
+        raise HTTPException(404, "story not found")
+    return rec
+
+
 def _http_store(exc: StoreError) -> None:
     if isinstance(exc, NotFound):
         raise HTTPException(404, "story not found") from exc
@@ -149,18 +161,22 @@ def _http_store(exc: StoreError) -> None:
 def _card(rec: StoryRecord, user: User) -> dict[str, Any]:
     setup = rec.setup()
     day = get_store().peek_day(rec)
+    owner = is_owner(user, rec.owner_id)
     return {
         "id": rec.id,
         "slug": rec.slug,
         "title": rec.title,
         "owner_id": rec.owner_id,
-        "is_owner": is_owner(user, rec.owner_id),
+        "is_owner": owner,
         "status": rec.status,
+        "visibility": rec.visibility,
         "day": day,
         "actor_count": len(setup.get("actors") or []),
         "location_count": len(setup.get("locations") or []),
         "created_at": rec.created_at,
         "updated_at": rec.updated_at,
+        "can_tick": can_tick(user, rec.owner_id, rec.status),
+        "can_god": can_god(user, rec.owner_id, rec.status),
     }
 
 
@@ -177,6 +193,7 @@ def _detail(rec: StoryRecord, user: User) -> dict[str, Any]:
         **_card(rec, user),
         "editable": rec.status == "draft" and owner,
         "can_god": can_god(user, rec.owner_id, rec.status),
+        "can_tick": can_tick(user, rec.owner_id, rec.status),
         "setup": setup,
         "sketch": sketch,
         "agent": jobmod.agent_state(get_store(), rec.id),
@@ -230,6 +247,8 @@ def _snapshot_for(rec: StoryRecord, user: User) -> dict[str, Any]:
     snap["slug"] = rec.slug
     snap["is_owner"] = owner
     snap["can_god"] = can_god(user, rec.owner_id, rec.status)
+    snap["can_tick"] = can_tick(user, rec.owner_id, rec.status)
+    snap["visibility"] = rec.visibility
     return snap
 
 
@@ -265,7 +284,7 @@ def me(user: User = Depends(current_user)):
 
 @app.get("/api/stories")
 def list_stories(user: User = Depends(current_user)):
-    return [_card(rec, user) for rec in get_store().list()]
+    return [_card(rec, user) for rec in get_store().list_visible(user.id)]
 
 
 @app.post("/api/stories")
@@ -287,7 +306,7 @@ def create_story(
 
 @app.post("/api/stories/{ref}/wizard")
 def wizard_story(ref: str, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     if rec.status != "draft":
         raise HTTPException(409, "sealed")
@@ -302,21 +321,21 @@ def wizard_story(ref: str, user: User = Depends(current_user)):
 
 @app.post("/api/stories/{ref}/duplicate")
 def duplicate_story(ref: str, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     copy = get_store().duplicate(rec.id, user.id)
     return _detail(copy, user)
 
 
 @app.get("/api/stories/{ref}")
 def get_story(ref: str, user: User = Depends(current_user)):
-    return _detail(_story(ref), user)
+    return _detail(_require_visible(user, _story(ref)), user)
 
 
 @app.patch("/api/stories/{ref}")
 def patch_story(
     ref: str, body: StoryPatchIn, user: User = Depends(current_user)
 ):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     try:
         updated = get_store().update_setup(
@@ -333,7 +352,7 @@ def patch_story(
 
 @app.post("/api/stories/{ref}/start")
 def start_story(ref: str, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     try:
         get_runtime().start(rec)
@@ -348,7 +367,7 @@ def reset_story(ref: str, user: User = Depends(current_user)):
     from playout import jobs as jobmod
     from playout.canon import World
 
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     if jobmod.story_busy(get_store(), rec.id):
         raise HTTPException(409, "busy")
@@ -381,7 +400,7 @@ def unstick_story(ref: str, user: User = Depends(current_user)):
     from playout import jobs as jobmod
     from playout.canon import World
 
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     if rec.status != "live":
         raise HTTPException(409, "not live")
@@ -400,7 +419,7 @@ def unstick_story(ref: str, user: User = Depends(current_user)):
 
 @app.get("/api/stories/{ref}/state")
 def story_state(ref: str, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     if rec.status != "live":
         raise HTTPException(409, "not live")
     if not get_store().canon_exists(rec.id):
@@ -413,7 +432,7 @@ async def story_stream(ref: str, request: Request):
     from playout.canon import World
 
     user = get_user(request)
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     if rec.status != "live":
         raise HTTPException(409, "not live")
     st = get_store()
@@ -467,7 +486,8 @@ async def story_stream(ref: str, request: Request):
 
 @app.post("/api/stories/{ref}/tick")
 def tick(ref: str, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
+    _require_owner(user, rec)
     if rec.status != "live":
         raise HTTPException(409, "not live")
     return _enqueue(rec, "tick", detail="即將開演")
@@ -475,7 +495,8 @@ def tick(ref: str, user: User = Depends(current_user)):
 
 @app.post("/api/stories/{ref}/day")
 def run_day(ref: str, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
+    _require_owner(user, rec)
     if rec.status != "live":
         raise HTTPException(409, "not live")
     return _enqueue(rec, "day", detail="演完今日")
@@ -483,7 +504,7 @@ def run_day(ref: str, user: User = Depends(current_user)):
 
 @app.post("/api/stories/{ref}/inject")
 def inject(ref: str, body: TextIn, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     if rec.status != "live":
         raise HTTPException(409, "not live")
@@ -500,7 +521,7 @@ def inject(ref: str, body: TextIn, user: User = Depends(current_user)):
 
 @app.post("/api/stories/{ref}/steer")
 def steer(ref: str, body: TextIn, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     if rec.status != "live":
         raise HTTPException(409, "not live")
@@ -517,7 +538,7 @@ def steer(ref: str, body: TextIn, user: User = Depends(current_user)):
 
 @app.post("/api/stories/{ref}/insert-location")
 def insert_location(ref: str, body: TextIn, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     if rec.status != "live":
         raise HTTPException(409, "not live")
@@ -534,7 +555,7 @@ def insert_location(ref: str, body: TextIn, user: User = Depends(current_user)):
 
 @app.post("/api/stories/{ref}/insert-actor")
 def insert_actor(ref: str, body: TextIn, user: User = Depends(current_user)):
-    rec = _story(ref)
+    rec = _require_visible(user, _story(ref))
     _require_owner(user, rec)
     if rec.status != "live":
         raise HTTPException(409, "not live")

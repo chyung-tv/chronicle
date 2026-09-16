@@ -8,23 +8,36 @@
  * or Auth.js: `const session = await auth(); return session?.user ?? null;`
  *
  * Keep the User { id, name } shape so catalog, ownership, and god gates stay put.
+ * Unsigned visitors are audience, not the seeded 港尾 owner.
  */
 
 import type { SessionUser } from "./types";
 
-export const DEV_USER: SessionUser = {
-  id: "dev-owner",
-  name: "開發者",
+export const GUEST_USER: SessionUser = {
+  id: "audience",
+  name: "訪客",
 };
 
 const KEY = "playout-user-id";
 const NAME_KEY = "playout-user-name";
 
+function newGuestId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `guest-${crypto.randomUUID()}`;
+  }
+  return `guest-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
 export function getCurrentUser(): SessionUser {
-  if (typeof window === "undefined") return DEV_USER;
-  const id = window.localStorage.getItem(KEY) || DEV_USER.id;
-  const name = window.localStorage.getItem(NAME_KEY) || DEV_USER.name;
-  return { id, name };
+  if (typeof window === "undefined") return GUEST_USER;
+  let id = window.localStorage.getItem(KEY);
+  let name = window.localStorage.getItem(NAME_KEY);
+  if (!id) {
+    id = newGuestId();
+    name = GUEST_USER.name;
+    persistUser({ id, name });
+  }
+  return { id, name: name || GUEST_USER.name };
 }
 
 export function persistUser(user: SessionUser) {

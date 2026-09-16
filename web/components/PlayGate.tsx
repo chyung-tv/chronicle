@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PlayOutApp } from "@/components/PlayOutApp";
+import { ReadingRoom } from "@/components/ReadingRoom";
 import { fetchMe, fetchStory } from "@/lib/api";
 import type { StoryDetail } from "@/lib/types";
 
 export function PlayGate({ storyRef }: { storyRef: string }) {
   const router = useRouter();
+  const search = useSearchParams();
+  const forceReading = search.get("room") === "reading";
   const [story, setStory] = useState<StoryDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +45,7 @@ export function PlayGate({ storyRef }: { storyRef: string }) {
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
-            <Link href="/">故事</Link>
+            <Link href="/">目錄</Link>
           </p>
           <h1>演繹</h1>
           <p className="sub">{error}</p>
@@ -56,7 +59,7 @@ export function PlayGate({ storyRef }: { storyRef: string }) {
       <header className="masthead">
         <div className="mast-title">
           <h1>演繹</h1>
-          <p className="sub">載入世界…</p>
+          <p className="sub">載入中…</p>
         </div>
       </header>
     );
@@ -67,13 +70,17 @@ export function PlayGate({ storyRef }: { storyRef: string }) {
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
-            <Link href="/">故事</Link>
+            <Link href="/">目錄</Link>
           </p>
           <h1>{story.title}</h1>
           <p className="sub">尚未開演。</p>
         </div>
       </header>
     );
+  }
+
+  if (!story.is_owner || forceReading) {
+    return <ReadingRoom storyId={story.id} isOwner={!!story.is_owner} />;
   }
 
   return <PlayOutApp storyId={story.id} />;

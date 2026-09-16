@@ -130,7 +130,10 @@ def test_wizard_endpoint_overwrites_setup(tmp_path, monkeypatch):
         assert body["setup"]["actors"][0]["want"]
         assert "聰明漂亮的女孩" in body["setup"]["actors"][0]["want"]
         live = next(s for s in client.get("/api/stories").json() if s["slug"] == "harbors-end")
-        sealed = client.post(f"/api/stories/{live['id']}/wizard")
+        sealed = client.post(
+            f"/api/stories/{live['id']}/wizard",
+            headers={"X-User-Id": "dev-owner"},
+        )
         assert sealed.status_code == 409
     appmod.close_runtime()
 

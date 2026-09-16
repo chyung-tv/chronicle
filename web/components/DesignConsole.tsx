@@ -187,7 +187,7 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
-            <Link href="/">故事</Link>
+            <Link href="/">目錄</Link>
           </p>
           <h1>世界設定</h1>
           <p className="sub">{error}</p>
@@ -254,7 +254,7 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
-            <Link href="/">故事</Link>
+            <Link href="/">目錄</Link>
             {hasDraft || readonly ? (
               <Link href={`/s/${story.id}/design/review`}>定稿</Link>
             ) : null}

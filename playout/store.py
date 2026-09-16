@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS stories (
     title TEXT NOT NULL,
     owner_id TEXT NOT NULL,
     status TEXT NOT NULL,
+    visibility TEXT NOT NULL DEFAULT 'private',
     setup_json TEXT NOT NULL,
     sketch_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
@@ -73,6 +74,7 @@ class StoryRecord:
     title: str
     owner_id: str
     status: str
+    visibility: str
     setup_json: str
     sketch_json: str
     created_at: str
@@ -106,12 +108,14 @@ def _slugify(title: str) -> str:
 def _row(r: Any) -> StoryRecord:
     keys = set(r.keys())
     sketch = r["sketch_json"] if "sketch_json" in keys else "{}"
+    visibility = r["visibility"] if "visibility" in keys else "private"
     return StoryRecord(
         id=r["id"],
         slug=r["slug"],
         title=r["title"],
         owner_id=r["owner_id"],
         status=r["status"],
+        visibility=visibility or "private",
         setup_json=r["setup_json"],
         sketch_json=sketch or "{}",
         created_at=r["created_at"],
@@ -147,6 +151,11 @@ class StoryStore:
                 self.cx.execute(
                     "ALTER TABLE stories ADD COLUMN sketch_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            if "visibility" not in cols:
+                self.cx.execute(
+                    "ALTER TABLE stories ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"
+                )
+            self._publish_harbors_end()
             self.cx.commit()
             from playout import jobs as jobmod
 
@@ -164,10 +173,22 @@ class StoryStore:
             self.cx.execute(
                 "ALTER TABLE stories ADD COLUMN sketch_json TEXT NOT NULL DEFAULT '{}'"
             )
+        if "visibility" not in cols:
+            self.cx.execute(
+                "ALTER TABLE stories ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"
+            )
+        self._publish_harbors_end()
         self.cx.commit()
         from playout import jobs as jobmod
 
         jobmod.ensure_jobs(self)
+
+    def _publish_harbors_end(self) -> None:
+        """港尾 is the public live demo. Do not rewrite its prose here."""
+        self.cx.execute(
+            "UPDATE stories SET visibility=? WHERE slug=?",
+            ("public", "harbors-end"),
+        )
 
     def close(self) -> None:
         self.cx.close()
@@ -205,6 +226,18 @@ class StoryStore:
             )
         ]
 
+    def list_visible(self, user_id: str) -> list[StoryRecord]:
+        """Public live stories plus the caller's own rows."""
+        return [
+            _row(r)
+            for r in self.cx.execute(
+                """SELECT * FROM stories
+                   WHERE owner_id=? OR (visibility='public' AND status='live')
+                   ORDER BY created_at ASC""",
+                (user_id,),
+            )
+        ]
+
     def _unique_slug(self, base: str, *, exclude_id: str | None = None) -> str:
         slug = base if SLUG_RE.match(base) else ""
         if not slug:
@@ -229,7 +262,9 @@ class StoryStore:
         sketch: StorySketch | None = None,
         slug: str | None = None,
         status: str = "draft",
+        visibility: str = "private",
     ) -> StoryRecord:
+        vis = visibility if visibility in ("public", "private") else "private"
         with self._lock:
             sid = str(uuid.uuid4())
             wanted = slug or _slugify(setup.title) or f"story-{sid[:8]}"
@@ -240,14 +275,15 @@ class StoryStore:
             sketch_payload = json.dumps(sketch.model_dump(mode="json"), ensure_ascii=False)
             self.cx.execute(
                 """INSERT INTO stories
-                   (id, slug, title, owner_id, status, setup_json, sketch_json, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                   (id, slug, title, owner_id, status, visibility, setup_json, sketch_json, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (
                     sid,
                     unique,
                     setup.title,
                     owner_id,
                     status,
+                    vis,
                     payload,
                     sketch_payload,
                     now,
@@ -383,7 +419,12 @@ class StoryStore:
         raw = json.loads(HARBORS_END.read_text(encoding="utf-8"))
         sketch, setup = parse_story_pack(raw)
         rec = self.create(
-            owner_id, setup, sketch=sketch, slug="harbors-end", status="draft"
+            owner_id,
+            setup,
+            sketch=sketch,
+            slug="harbors-end",
+            status="draft",
+            visibility="public",
         )
         world = world_from_setup(
             self.canon_ref(rec.id),

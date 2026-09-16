@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from tests.conftest import OWNER_HEADERS
 from playout.agents import actor as actor_mod
 from playout.loop import Simulation
 import playout.app as appmod
@@ -120,11 +121,11 @@ def test_tick_command_accepts_without_waiting(tmp_path, monkeypatch):
     with TestClient(appmod.app) as client:
         story = _harbors(client)
         sid = story["id"]
-        r = client.post(f"/api/stories/{sid}/tick")
+        r = client.post(f"/api/stories/{sid}/tick", headers=OWNER_HEADERS)
         assert r.status_code == 200
         assert r.json() == {"accepted": True}
         assert barrier.wait(timeout=8)
-        busy = client.post(f"/api/stories/{sid}/tick")
+        busy = client.post(f"/api/stories/{sid}/tick", headers=OWNER_HEADERS)
         assert busy.status_code == 409
         snap = client.get(f"/api/stories/{sid}/state").json()
         assert snap["activity"] == "thinking"
@@ -148,13 +149,17 @@ def test_reset_unseals_to_draft(tmp_path, monkeypatch):
         sid = story["id"]
         before = client.get(f"/api/stories/{sid}/state").json()
         assert before["activity"] == "idle"
-        r = client.post(f"/api/stories/{sid}/reset")
+        r = client.post(f"/api/stories/{sid}/reset", headers=OWNER_HEADERS)
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "draft"
         assert body["editable"] is True
         missing = client.get(f"/api/stories/{sid}/state")
-        assert missing.status_code == 409
+        assert missing.status_code == 404
+        owner_state = client.get(
+            f"/api/stories/{sid}/state", headers=OWNER_HEADERS
+        )
+        assert owner_state.status_code == 409
     appmod.close_runtime()
 
 
@@ -170,7 +175,7 @@ def test_reset_409_when_busy(tmp_path, monkeypatch):
         )
         world.set_activity("thinking", detail="held")
         world.close()
-        r = client.post(f"/api/stories/{story['id']}/reset")
+        r = client.post(f"/api/stories/{story['id']}/reset", headers=OWNER_HEADERS)
         assert r.status_code == 409
         world = World(
             store.canon_ref(story["id"]), database_url=store.database_url

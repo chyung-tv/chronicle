@@ -138,7 +138,7 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
-            <Link href="/">故事</Link>
+            <Link href="/">目錄</Link>
           </p>
           <h1>巫師稿</h1>
           <p className="sub">{error}</p>
@@ -163,7 +163,7 @@ export function SetupReview({ storyRef }: { storyRef: string }) {
       <header className="masthead">
         <div className="mast-title">
           <p className="chrome-links">
-            <Link href="/">故事</Link>
+            <Link href="/">目錄</Link>
             <Link href={`/s/${story.id}/design`}>速寫</Link>
             {story.status === "live" ? (
               <Link href={`/s/${story.id}`}>進入演繹</Link>

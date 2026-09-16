@@ -220,6 +220,50 @@ a.btn:focus-visible { outline: 2px solid var(--foam); outline-offset: 2px; }
 .chrome-links a { color: var(--foam); text-decoration: none; }
 .chrome-links a:hover { color: var(--paper); }
 
+.mode-switch {
+  display: flex;
+  gap: 0.25rem;
+}
+.mode-switch button {
+  background: #14282e;
+  color: var(--paper);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  font-family: var(--chrome);
+}
+.mode-switch button.on {
+  background: var(--paper);
+  color: var(--on-paper);
+}
+
+.workspace.reading-novel {
+  grid-template-columns: 1.65fr 1fr;
+  min-height: calc(100vh - 160px);
+}
+.workspace.reading-inspect {
+  grid-template-columns: 1.25fr 1fr;
+  min-height: calc(100vh - 160px);
+}
+.workspace.reading-novel .panel,
+.workspace.reading-inspect .panel {
+  max-height: calc(100vh - 180px);
+}
+
+.catalog-page {
+  padding: 0 0 2rem;
+}
+.catalog-section h2 {
+  margin: 1.15rem 1.25rem 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--foam);
+  font-weight: 500;
+}
+.catalog-empty {
+  padding: 0 1.25rem 0.5rem;
+}
+
 .banner.ok { color: var(--ok); }
 
 .catalog {
@@ -541,6 +585,8 @@ a.btn:focus-visible { outline: 2px solid var(--foam); outline-offset: 2px; }
 
 @media (max-width: 980px) {
   .workspace { grid-template-columns: 1fr; max-height: none; }
+  .workspace.reading-novel,
+  .workspace.reading-inspect { grid-template-columns: 1fr; }
   .panel { max-height: 420px; }
   .god { grid-template-columns: 1fr; }
   .masthead { grid-template-columns: 1fr; }
