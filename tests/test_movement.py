@@ -173,7 +173,7 @@ def test_apply_verdict_stores_quoted_speech_payload(world):
         world,
         actor_id="tomas",
         counterpart_id="mara",
-        a_text="對關瑪道：你也在。",
+        a_text="對關瑪說：你也在。",
         b_text=None,
         verdict=verdict,
     )

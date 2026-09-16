@@ -30,7 +30,7 @@ STEER_SYSTEM = with_prose("""你是封閉正史模擬的戲場總管。
 
 只回傳 JSON：
 {
-  "summary": "短句，繁體中文",
+  "summary": "短句，香港書面",
   "success_predicates": ["kill:a->b"],
   "failure_predicates": ["dead:a", "kill:b->a"],
   "rungs": [
@@ -43,7 +43,7 @@ STEER_SYSTEM = with_prose("""你是封閉正史模擬的戲場總管。
 
 Patch ops: rumor, broadcast, add_object, describe_object, reveal_object, move_actor, describe_location, set_weather, add_location, add_edge, add_actor.
 Steer 戰役禁用 kill_actor、injure_actor、edit_actor、destroy_location。
-injection.summary 與 patch.detail 一律繁體中文。
+injection.summary 與 patch.detail 一律香港書面語。
 """)
 
 
@@ -140,20 +140,20 @@ def _heuristic_spawn(
                 actor_id=aid,
                 name="路人",
                 location_id=loc_id if shop and origin else origin,
-                detail="一個尚未深識的人出現了。",
+                detail="一個還不深識的人出現了。",
             )
         )
     if not patches:
         return None
     return SteerCampaign(
-        summary=text.strip() or "世界裂出一條新縫。",
+        summary=text.strip() or "世界多出一條縫。",
         success_predicates=[],
         failure_predicates=[],
         rungs=[
             SteerRung(
                 id="motive",
                 kind="motive",
-                injection=StorytellerPlan(summary="新處將現。", patches=patches),
+                injection=StorytellerPlan(summary="新地方快出現。", patches=patches),
             ),
             SteerRung(
                 id="means",
@@ -203,7 +203,7 @@ def _heuristic_campaign(world: World, text: str) -> SteerCampaign:
             Patch(
                 op="rumor",
                 actor_ids=[a_id],
-                detail=f"你得著憑據：這物指向{b['name']}。不是舊憶，是眼前的紙。",
+                detail=f"你得着憑據：這物指向{b['name']}。不是舊憶，是眼前的紙。",
             ),
         ]
     else:
@@ -218,7 +218,7 @@ def _heuristic_campaign(world: World, text: str) -> SteerCampaign:
             Patch(
                 op="rumor",
                 actor_ids=[a_id],
-                detail=f"你得著憑據：{b['name']}正在算計你。不是記憶——是紙，此刻若伸手便可取。",
+                detail=f"你得着憑據：{b['name']}正在算計你。不是記憶——是紙，此刻若伸手就可以取。",
             ),
         ]
     means = [
@@ -273,7 +273,7 @@ def _heuristic_campaign(world: World, text: str) -> SteerCampaign:
         ),
     ]
     return SteerCampaign(
-        summary=f"令{a['name']}有機會傷害{b['name']}，卻不代他們下手。",
+        summary=f"讓{a['name']}有機會傷害{b['name']}，但不代他們下手。",
         success_predicates=[f"kill:{a_id}->{b_id}"],
         failure_predicates=[f"dead:{a_id}", f"kill:{b_id}->{a_id}"],
         rungs=[

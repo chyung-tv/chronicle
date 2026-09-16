@@ -123,9 +123,9 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
     )
     obj_s = "、".join(f"{o.name} [{o.id}]" for o in loc.visible_objects) or "眼前無物"
     inv_s = "、".join(f"{o.name} [{o.id}]" for o in a.inventory) or "空手"
-    perc_s = "\n".join(f"- {p}" for p in a.perceptions[:10]) or "- （尚無）"
+    perc_s = "\n".join(f"- {p}" for p in a.perceptions[:10]) or "- （暫時沒有）"
     mem_s = "\n".join(f"- {m}" for m in a.memories) or "- （日記空白）"
-    ref_s = "\n".join(f"- {r}" for r in a.reflections) or "- （無）"
+    ref_s = "\n".join(f"- {r}" for r in a.reflections) or "- （沒有）"
     rel_s = (
         "\n".join(
             f"{r.name}（{r.id}）：信 {r.trust}，怨 {r.resentment}。{r.notes}"
@@ -139,15 +139,15 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
     ]
     walkable = [e.id for e in loc.connected if e.intact]
     return f"""世界：{w.title}。{w.worldview}
-時辰：{w.beat}。天色：{w.weather}。
+這一輪：{w.beat}。天色：{w.weather}。
 開局：{w.clock}
 
 你是：{a.name}（{a.id}）
-口吻：{a.voice}
+說話方式：{a.voice}
 本性（不變）：{a.constitution}
-深願：{a.want}
+心底想要的：{a.want}
 你的秘密（他人不知，除非已聞）：{a.secret}
-眼前之願（屬你）：{a.goal}
+此刻想做的（屬你）：{a.goal}
 心境：{a.mood}
 帶傷：{a.injured}{("（" + a.condition + "）") if a.condition else ""}
 
@@ -168,7 +168,7 @@ def view_as_prompt(world: World, actor_id: str, extra: str = "") -> str:
 憶起的日記：
 {mem_s}
 
-省思：
+回想：
 {ref_s}
 
 {extra}

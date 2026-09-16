@@ -52,7 +52,7 @@ def test_steer_does_not_puppet_a_kill(world):
     assert kills == []
     assert world.actor("tomas")["alive"]
     assert "kill" not in world.actor("mara")["goal"].lower()
-    assert out["campaign"]["summary"].startswith("令關瑪有機會傷害張渡")
+    assert out["campaign"]["summary"].startswith("讓關瑪有機會傷害張渡")
 
 
 def test_steer_injects_new_events_only(world):

@@ -19,11 +19,11 @@ from playout.models import (
     StorytellerPlan,
 )
 from playout.storyteller import apply_patches
-from playout.zh import with_prose
+from playout.zh import NATURE_UNSET, WANT_UNSET, with_prose
 
 LOCATION_WRITER_SYSTEM = with_prose("""你是封閉正史模擬的地點書記。人要走向或改寫一處地方。你決定那地方此刻是否存在、如何連上地圖、裡面有何物。
 
-只回傳 JSON：{"summary":"一句繁體中文","patches":[...]}
+只回傳 JSON：{"summary":"一句香港書面","patches":[...]}
 
 可用 op：add_location, add_edge, describe_location, destroy_location, add_object, describe_object, destroy_object, reveal_object。
 
@@ -37,7 +37,7 @@ LOCATION_WRITER_SYSTEM = with_prose("""你是封閉正史模擬的地點書記�
 
 ACTOR_WRITER_SYSTEM = with_prose("""你是封閉正史模擬的人物書記。人要找、改、傷、或殺死一個人物。你決定那人此刻是否在場、傷勢如何。
 
-只回傳 JSON：{"summary":"一句繁體中文","patches":[...]}
+只回傳 JSON：{"summary":"一句香港書面","patches":[...]}
 
 可用 op：add_actor, edit_actor, injure_actor, kill_actor, rumor。
 
@@ -53,7 +53,7 @@ ACTOR_WRITER_SYSTEM = with_prose("""你是封閉正史模擬的人物書記。�
 
 def _perceptions_blob(world: World, actor_id: str) -> str:
     rows = world.perceptions_for(actor_id, limit=8)
-    return "\n".join(p["text"] for p in rows) or "（無）"
+    return "\n".join(p["text"] for p in rows) or "（沒有）"
 
 
 def _place_context(world: World, origin_id: str, name: str, actor_id: str) -> str:
@@ -124,9 +124,9 @@ def _heuristic_person_plan(
                 actor_id=aid,
                 name=name.strip(),
                 location_id=here_id,
-                voice=f"{name.strip()}的口吻尚未定。",
-                want="尚未定願。",
-                constitution="尚未定性。",
+                voice=f"{name.strip()}的聲線未定。",
+                want=WANT_UNSET,
+                constitution=NATURE_UNSET,
                 detail=f"{name.strip()}就在你眼前。",
             )
         ],
@@ -471,7 +471,7 @@ def resolve_move(world: World, intent: "MoveIntent", llm: LLM | None = None):
 def guess_unknown_person(world: World, text: str) -> str | None:
     if world.find_actor(text):
         return None
-    for c in ("店員", "掌櫃", "老闆", "路人", "客人", "小廝"):
+    for c in ("店員", "掌櫃", "老闆", "路人", "客人", "夥計", "小廝"):
         if c in text and not world.find_actor(c):
             return c
     markers = ("找", "叫", "問", "對")
@@ -480,7 +480,7 @@ def guess_unknown_person(world: World, text: str) -> str | None:
     t = text.strip()
     for m in ("找", "去找", "叫", "問", "對"):
         t = t.replace(m, " ")
-    t = t.replace("道", " ").replace("說", " ").strip(" 。，、：:「」 ")
+    t = t.replace("道", " ").replace("說", " ").replace("講", " ").strip(" 。，、：:「」 ")
     if world.find_actor(t) or world.find_location(t) or world.find_object(t):
         return None
     if is_vague_place(t) or len(t) < 2 or len(t) > 12:

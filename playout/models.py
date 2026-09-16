@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from playout.zh import DESC_UNSET, MOOD_DEFAULT, NATURE_UNSET, VOICE_UNSET, WANT_UNSET
+
 
 class MoveAction(BaseModel):
     type: Literal["move"] = "move"
@@ -505,7 +507,7 @@ def empty_setup(title: str = "未名") -> StorySetup:
             LocationSetup(
                 id="place",
                 name="一處",
-                description="尚無描述。",
+                description=DESC_UNSET,
                 x=270,
                 y=180,
             )
@@ -516,12 +518,12 @@ def empty_setup(title: str = "未名") -> StorySetup:
                 id="someone",
                 name="某人",
                 location="place",
-                voice="尚未定腔。",
-                want="尚未定願。",
+                voice=VOICE_UNSET,
+                want=WANT_UNSET,
                 secret="",
-                constitution="尚未定性。",
-                goal="尚未定願。",
-                mood="靜",
+                constitution=NATURE_UNSET,
+                goal=WANT_UNSET,
+                mood=MOOD_DEFAULT,
             )
         ],
     )

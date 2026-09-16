@@ -297,7 +297,7 @@ def wizard_story(ref: str, user: User = Depends(current_user)):
         StorySketch.model_validate(rec.sketch() or {})
     except Exception as e:
         raise HTTPException(400, f"invalid sketch: {e}") from e
-    return _enqueue(rec, "wizard", detail="正在請示巫師…", actor="wizard")
+    return _enqueue(rec, "wizard", detail="正在請巫師補完…", actor="wizard")
 
 
 @app.post("/api/stories/{ref}/duplicate")

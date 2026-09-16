@@ -8,18 +8,19 @@ from typing import Any
 from playout.canon import World
 from playout.llm import LLM
 from playout.models import WriterChapter
-from playout.zh import with_prose
+from playout.zh import say, with_prose
 
 WRITER_SYSTEM = with_prose("""你是小說家，重述一份模擬日誌。可以壓縮、略過早飯、選定一個視角。
 不可捏造日誌裡沒有的事件、死亡、親吻、發現或對白。
 每一樁事實都須能被所引的 event id 支撐。
 當日無人死，就不要寫死；當日有死，照實寫，不必迴避。
-有 payload.speeches 時，寫成「甲對乙道：「…」」。用詞可稍加打磨，意思與引號內的話不可改。
+有 payload.speeches 時，寫成「甲對乙說：「…」」。用詞可稍加打磨，意思與引號內的話不可改。
+對白可以保留人物口語；旁述用書面，不要把整章寫成粵語口語。
 沒有記錄下來的台詞，才可改寫成招呼、點頭之類。
 可就「地點」裡已有的環境描寫與當天天色加以渲染（潮、風、氣味、泥）。不可添該地描述與事件帶都沒有的物件、足跡或房間。
 
 只回傳 JSON：
-{"pov":"<actor_id>","tags":["背叛","颱風"],"cited_event_ids":[1,2,3],"text":"章回正文，繁體中文書面，約四百至八百字"}
+{"pov":"<actor_id>","tags":["背叛","颱風"],"cited_event_ids":[1,2,3],"text":"章節正文，香港繁體中文書面，約四百至八百字"}
 """)
 
 
@@ -30,7 +31,7 @@ def _sift_tags(summaries: list[str]) -> list[str]:
         "暴力": ["attack", "kill", "injured", "襲擊", "殺", "傷"],
         "發現": ["examines", "letter", "finds", "searches", "察看", "信", "搜"],
         "離去": ["goes to", "前往"],
-        "對談": ["對", "道：「"],
+        "對談": ["對", "說：「", "道：「", "講：「"],
         "世變": ["storm", "meteor", "ruined", "颱風", "隕石", "已毀"],
         "導引": ["motive", "weapon", "alone", "動機", "刀", "獨處"],
     }.items():
@@ -119,23 +120,23 @@ def _heuristic_chapter(world: World, day: int, events: list) -> WriterChapter:
                         hearer = world.actor(hearer_id)["name"]
                     except Exception:
                         hearer = hearer_id
-                    bits.append(f"{speaker}對{hearer}道：「{line}」")
+                    bits.append(say(speaker, line, hearer))
                 else:
-                    bits.append(f"{speaker}道：「{line}」")
+                    bits.append(say(speaker, line))
             lines.append(" ".join(bits))
         else:
             lines.append(f"{e['summary']}")
     tags = _sift_tags([e["summary"] for e in events])
     if not lines:
         text = (
-            f"{pov_name}度過第{day}日一段無事的光陰。天色憋著。無事可記，因為無事發生。"
+            f"{pov_name}過了第{day}日，沒有甚麼事。天色悶着。沒有可記的，因為根本沒發生。"
         )
     else:
         body = " ".join(lines[:18])
         text = (
-            f"第{day}日，從{pov_name}這一側看。\n\n"
-            f"鎮不為誰停。{body}\n\n"
-            f"發生的，便已發生。其餘是天色。"
+            f"第{day}日，從{pov_name}這邊看。\n\n"
+            f"鎮不會為誰停下來。{body}\n\n"
+            f"發生了的，就已經發生。其餘是天色。"
         )
     return WriterChapter(pov=pov, tags=tags, cited_event_ids=cited, text=text)
 

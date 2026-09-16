@@ -339,7 +339,7 @@ def apply_sqlite_seals(cx: Any) -> None:
         "CREATE TRIGGER IF NOT EXISTS perceptions_no_update BEFORE UPDATE ON perceptions BEGIN SELECT RAISE(ABORT, 'canon sealed'); END;"
     )
 
-TIME_LABELS = ["黎明", "上午", "正午", "午後", "黃昏", "夜"]
+TIME_LABELS = ["黎明", "上午", "正午", "下午", "黃昏", "夜"]
 
 
 class CanonError(Exception):

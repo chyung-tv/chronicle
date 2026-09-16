@@ -63,7 +63,7 @@ export function DesignConsole({ storyRef }: { storyRef: string }) {
           !!(
             rec.setup.opening_situation?.trim() ||
             rec.setup.worldview?.trim() ||
-            rec.setup.actors.some((a) => a.voice && a.voice !== "尚未定腔。")
+            rec.setup.actors.some((a) => a.voice && a.voice !== "聲線未定。")
           )
         );
       } catch (e) {

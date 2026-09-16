@@ -21,6 +21,8 @@ from playout.models import (
 if TYPE_CHECKING:
     from playout.canon import World
 
+from playout.zh import say
+
 _WEAPON = (
     "knife",
     "cleaver",
@@ -89,7 +91,7 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
         speech = action.speech.strip()[:800]
         eid = world.append_event(
             "speak",
-            f"{actor['name']}對{target['name']}道：「{speech}」",
+            say(actor["name"], speech, target["name"]),
             actor_id=actor_id,
             target_id=action.target,
             payload={
@@ -104,11 +106,11 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
                 "location_id": actor["location_id"],
             },
         )
-        world.perceive(eid, actor_id, f"你對{target['name']}道：「{speech}」")
-        world.perceive(eid, action.target, f"{actor['name']}對你道：「{speech}」")
+        world.perceive(eid, actor_id, say("你", speech, target["name"]))
+        world.perceive(eid, action.target, say(actor["name"], speech, "你"))
         for wid in _witnesses(world, actor["location_id"], {actor_id, action.target}):
             world.perceive(
-                eid, wid, f"{actor['name']}對{target['name']}道：「{speech}」"
+                eid, wid, say(actor["name"], speech, target["name"])
             )
         return {"ok": True, "event_id": eid, "expect_reaction": action.target}
 
@@ -193,7 +195,7 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
                         "UPDATE objects SET hidden=0 WHERE id=?", (h["id"],)
                     )
                 world.cx.commit()
-                found = "此處藏有：" + "、".join(h["name"] for h in hidden) + "。"
+                found = "這裏藏着：" + "、".join(h["name"] for h in hidden) + "。"
             eid = world.append_event(
                 "examine",
                 f"{actor['name']}搜看{loc['name']}。{found}",
@@ -221,11 +223,11 @@ def apply_action(world: World, actor_id: str, action: Action) -> dict:
         world.cx.commit()
         eid = world.append_event(
             "write_note",
-            f"{actor['name']}寫下一紙：「{action.text[:200]}」",
+            f"{actor['name']}寫下一張紙條：「{action.text[:200]}」",
             actor_id=actor_id,
             payload={"object_id": oid},
         )
-        world.perceive(eid, actor_id, f"你寫道：{action.text[:200]}")
+        world.perceive(eid, actor_id, f"你寫下：{action.text[:200]}")
         return {"ok": True, "event_id": eid}
 
     if isinstance(action, AttackAction):
@@ -268,7 +270,7 @@ def _violence(world: World, actor, target_id: str, lethal: bool) -> dict:
             world.perceive(eid, actor["id"], f"你殺死了{target['name']}。")
             for wid in _witnesses(world, loc, {actor["id"], target_id}):
                 world.perceive(
-                    eid, wid, f"你親眼見{actor['name']}殺死{target['name']}。"
+                    eid, wid, f"你親眼看見{actor['name']}殺死{target['name']}。"
                 )
             world.bump_relationship(
                 actor["id"], target_id, resentment=3, note="殺了對方"
@@ -277,7 +279,7 @@ def _violence(world: World, actor, target_id: str, lethal: bool) -> dict:
         world.set_injured(target_id, True)
         eid = world.append_event(
             "attempted_kill",
-            f"{actor['name']}欲殺{target['name']}而不成；{target['name']}受傷。",
+            f"{actor['name']}想殺{target['name']}但不成功；{target['name']}受傷。",
             actor_id=actor["id"],
             target_id=target_id,
         )
