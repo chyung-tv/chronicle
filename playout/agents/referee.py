@@ -29,7 +29,7 @@ from playout.models import (
     WriteNoteAction,
 )
 from playout.referee import apply_action
-from playout.zh import with_prose
+from playout.zh import say, with_prose
 
 ALLOWED_KINDS = {
     "speak",
@@ -51,10 +51,10 @@ ALLOWED_KINDS = {
 }
 
 REFEREE_SYSTEM = with_prose("""你是封閉正史模擬的裁判，不是人物。
-兩造（或一造）用自然語言描述他們此刻試圖做的事。你根據場面、身體、物件、關係與體質，判定實際發生了什麼。
+兩造（或一造）用自然語言描述他們此刻試圖做的事。你根據場面、身體、物件、關係與體質，判定實際發生了甚麼。
 
 只回傳 JSON，欄位：
-- summary: 一句已發生之事，繁體中文，寫進事件帶
+- summary: 一句已發生之事，香港書面，寫進事件帶
 - kind: speak / attack / kill / attempted_kill / take / drop / examine / write_note / wait / move / failed_speak / failed_attack / failed_take / interact
 - patches: 可選，僅用這些 op：injure_actor, kill_actor, move_actor, reveal_object, rumor, add_object, destroy_object, describe_location
 - speeches: [{speaker_id, hearer_id, text}] 實際說出的話（不是試圖說而沒說成的）
@@ -68,10 +68,10 @@ REFEREE_SYSTEM = with_prose("""你是封閉正史模擬的裁判，不是人物�
 - 不可取走仍隱藏、且本回合尚未被察看揭開之物。
 - 不可取走不在此地或已在別人手上之物。
 - 移動只可到相鄰且完好的地點。不可寫未走到之地。
-- 實際說出的話必須放進 speeches，原文加引號，不可只寫「打了招呼」。
+- 實際說出的話必須放進 speeches，原文加引號，不可只寫「打了招呼」。旁述用「說」，不要用章回的「道」。
 - 暴力可以失敗。無趁手的兵器、對方未受傷時，欲殺多半只成受傷（attempted_kill）。
-- 若乙方不理（b_text 為空），仍要判定甲方單獨做成了什麼。
-- 對白、summary、perceptions、detail 一律繁體中文。
+- 若乙方不理（b_text 為空），仍要判定甲方單獨做成了甚麼。
+- 對白、summary、perceptions、detail 一律香港繁體中文。
 """)
 
 
@@ -86,7 +86,7 @@ def named_present_actor(world: World, actor_id: str, text: str) -> str | None:
     for o in others:
         if o["name"] in text or o["id"] in text or o["id"] in text.lower():
             return o["id"]
-    markers = ("道", "說", "問", "「", "襲擊", "殺", "還手", "動手")
+    markers = ("道", "說", "講", "問", "「", "襲擊", "殺", "還手", "動手")
     if len(others) == 1 and any(m in text for m in markers):
         return others[0]["id"]
     return None
@@ -127,7 +127,7 @@ def peel_speech_quotes(text: str) -> str:
 
 
 def extract_speech(text: str) -> str:
-    for sep in ("道：", "道:", "說：", "說:", "：「"):
+    for sep in ("說：", "說:", "講：", "講:", "道：", "道:", "：「"):
         if sep in text:
             return peel_speech_quotes(text.split(sep, 1)[1])
     m = re.search(r"[「\"'](.+)[」\"']", text)
@@ -195,7 +195,7 @@ def action_as_interact_text(world: World, actor_id: str, action: Action) -> str 
             name = world.actor(action.target)["name"]
         except Exception:
             name = action.target
-        return f"對{name}道：{action.speech}"
+        return f"對{name}說：{action.speech}"
     if isinstance(action, AttackAction):
         try:
             name = world.actor(action.target)["name"]
@@ -219,7 +219,7 @@ def action_as_interact_text(world: World, actor_id: str, action: Action) -> str 
     if isinstance(action, ExamineAction):
         return f"察看{action.target}"
     if isinstance(action, WriteNoteAction):
-        return f"寫下一紙：{action.text}"
+        return f"寫下一張紙條：{action.text}"
     if isinstance(action, MoveAction):
         return f"前往{action.to}"
     return None
@@ -440,10 +440,10 @@ def apply_verdict(
                 and other["location_id"] == speaker["location_id"]
             ):
                 speech_notes.append(
-                    (sp.speaker_id, f"你對{other['name']}道：「{line}」")
+                    (sp.speaker_id, say("你", line, other["name"]))
                 )
                 speech_notes.append(
-                    (hearer, f"{speaker['name']}對你道：「{line}」")
+                    (hearer, say(speaker["name"], line, "你"))
                 )
                 for wid in world.actors_at(speaker["location_id"]):
                     if wid["id"] in {sp.speaker_id, hearer}:
@@ -451,7 +451,7 @@ def apply_verdict(
                     speech_notes.append(
                         (
                             wid["id"],
-                            f"{speaker['name']}對{other['name']}道：「{line}」",
+                            say(speaker["name"], line, other["name"]),
                         )
                     )
                 accepted_speeches.append(
@@ -467,7 +467,7 @@ def apply_verdict(
             r.actor_id for r in ok_moves
         }:
             continue
-        speech_notes.append((sp.speaker_id, f"你道：「{line}」"))
+        speech_notes.append((sp.speaker_id, say("你", line)))
         accepted_speeches.append(
             {"speaker_id": sp.speaker_id, "hearer_id": None, "text": line}
         )
@@ -489,9 +489,9 @@ def apply_verdict(
             line = str(first["text"])
             if hearer_id:
                 hearer = world.actor(str(hearer_id))
-                summary = f"{speaker['name']}對{hearer['name']}道：「{line}」"
+                summary = say(speaker["name"], line, hearer["name"])
             else:
-                summary = f"{speaker['name']}道：「{line}」"
+                summary = say(speaker["name"], line)
 
     mover_ids = {r.actor_id for r in ok_moves}
     dest_ids = {r.to_id for r in ok_moves if r.to_id}

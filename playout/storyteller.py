@@ -13,14 +13,14 @@ from playout.models import (
     Patch,
     StorytellerPlan,
 )
-from playout.zh import with_prose
+from playout.zh import MOOD_DEFAULT, NATURE_UNSET, VOICE_UNSET, WANT_UNSET, with_prose
 
 STORYTELLER_SYSTEM = with_prose("""你把人寫的世界事件，變成封閉正史模擬可用的補丁。
 不要替人物寫對白。不要派給他們目標。
-你只改世界：地方、物件、傷勢、天色、環境逼人移動，以及人能感知到什麼。
+你只改世界：地方、物件、傷勢、天色、環境逼人移動，以及人能感知到甚麼。
 
 只回傳 JSON：
-{"summary":"一句已發生之事，繁體中文","patches":[...]}
+{"summary":"一句已發生之事，香港書面","patches":[...]}
 
 Patch ops:
 {"op":"destroy_location","location_id":"...","detail":"..."}
@@ -44,7 +44,7 @@ Patch ops:
 - 只發明從此刻起的新事實。永不改寫過去。
 - 毀傷某地時，必須是事件文裡點名的既有地點。不可預設某一處。
 - 寧用 rumor/broadcast，少搬人。move_actor 只可到該人當下相鄰且完好的地點，不可瞬移。
-detail、summary 一律繁體中文。
+detail、summary 一律香港書面語。
 """)
 
 
@@ -261,13 +261,13 @@ def _apply_patch(world: World, event_id: int, patch: Patch) -> None:
             (
                 aid,
                 patch.name or aid,
-                patch.voice or "尚未定腔。",
-                patch.want or patch.detail or "尚未定願。",
+                patch.voice or VOICE_UNSET,
+                patch.want or patch.detail or WANT_UNSET,
                 patch.secret or "",
-                patch.constitution or patch.detail or "尚未定性。",
+                patch.constitution or patch.detail or NATURE_UNSET,
                 loc_id,
-                patch.goal or patch.want or patch.detail or "尚未定願。",
-                patch.mood or "靜",
+                patch.goal or patch.want or patch.detail or WANT_UNSET,
+                patch.mood or MOOD_DEFAULT,
                 patch.condition or "",
             ),
         )

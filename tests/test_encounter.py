@@ -35,7 +35,7 @@ def test_interact_triggers_reply_before_return(tmp_path):
     assert llm.mode == "mock"
     deps = ActorDeps(world=world, llm=llm, actor_id="mara")
     result = dispatch_action(
-        deps, InteractAction(text="對張渡道：舢板呢？你看見沒有。")
+        deps, InteractAction(text="對張渡說：舢板呢？你看見沒有。")
     )
     assert result.get("ok")
     assert result.get("encounter")
@@ -57,7 +57,7 @@ def test_b_wait_is_ignore(tmp_path, monkeypatch):
             return ActorDecision(thought="不理。", action=WaitAction())
         return ActorDecision(
             thought="問。",
-            action=InteractAction(text="對張渡道：說話。"),
+            action=InteractAction(text="對張渡說：說話。"),
         )
 
     monkeypatch.setattr("playout.actors.decide", fake_decide)
@@ -78,11 +78,11 @@ def test_b_move_ends_colocation(tmp_path, monkeypatch):
         if actor_id == "tomas":
             return ActorDecision(
                 thought="走。",
-                action=InteractAction(text="前往鹹燈客棧（inn）"),
+                action=InteractAction(text="前往鹹燈旅館（inn）"),
             )
         return ActorDecision(
             thought="問。",
-            action=InteractAction(text="對張渡道：站住。"),
+            action=InteractAction(text="對張渡說：站住。"),
         )
 
     monkeypatch.setattr("playout.actors.decide", fake_decide)
@@ -103,13 +103,13 @@ def test_max_rounds_stops_ping_pong(tmp_path, monkeypatch):
         other_name = "張渡" if other == "tomas" else "關瑪"
         return ActorDecision(
             thought="再說。",
-            action=InteractAction(text=f"對{other_name}道：你聽好。"),
+            action=InteractAction(text=f"對{other_name}說：你聽好。"),
         )
 
     monkeypatch.setattr("playout.actors.decide", fake_decide)
     deps = ActorDeps(world=world, llm=llm, actor_id="mara", max_rounds=3, mutate_budget=4)
     for _ in range(4):
-        dispatch_action(deps, InteractAction(text="對張渡道：聽我說。"))
+        dispatch_action(deps, InteractAction(text="對張渡說：聽我說。"))
     assert deps.encounter_rounds == 3
     assert deps.mutates_used == 4
     world.close()
@@ -125,7 +125,7 @@ def test_nested_run_cannot_open_encounter(tmp_path, monkeypatch):
         other_name = "張渡" if other == "tomas" else "關瑪"
         return ActorDecision(
             thought="回。",
-            action=InteractAction(text=f"對{other_name}道：嗯。"),
+            action=InteractAction(text=f"對{other_name}說：嗯。"),
         )
 
     monkeypatch.setattr("playout.actors.decide", fake_decide)
@@ -141,7 +141,7 @@ def test_b_still_in_day_bag_after_encounter(tmp_path):
     _together(world)
     llm = LLM()
     deps = ActorDeps(world=world, llm=llm, actor_id="mara")
-    dispatch_action(deps, InteractAction(text="對張渡道：舢板。"))
+    dispatch_action(deps, InteractAction(text="對張渡說：舢板。"))
     plan = build_day_plan(world, [], random.Random(0))
     actors = [s["actor_id"] for s in plan["slots"] if s["kind"] == "actor"]
     assert "tomas" in actors
@@ -243,7 +243,7 @@ def test_live_nested_uses_await_run_not_run_sync(tmp_path, monkeypatch):
             if deps.in_encounter:
                 await interact(ctx, "有船就走。別那樣看我。")
             else:
-                await interact(ctx, "對張渡道：舢板呢？你看見沒有。")
+                await interact(ctx, "對張渡說：舢板呢？你看見沒有。")
             return SimpleNamespace(output=ActorInner(thought="畢。"))
 
         def run_sync(self, *args, **kwargs):

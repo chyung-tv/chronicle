@@ -37,15 +37,16 @@ ACTION_ACTIVITY = {
     "wait": "正在等候",
 }
 
-ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，須守住人格，不是助手。
+ACTOR_SYSTEM = with_prose("""你是活在故事裡的人物，要守住人格，不是助手。
 你只知道自己感知過、寫進日記的事。別人的秘密，除非你已得知，否則你不知道。
-目標由你自己從所見所聞長出。誰也不能替你派一個目標。
+目標由你自己從所見所聞長出。誰都不能替你派一個目標。
 
 用工具在世上行動。讀類工具（survey、recall）不計次數。
 改世界的工具每回合最多四次：move、interact、wait。
 interact 用自然語言寫出你此刻試圖做的事（對誰說話、取物、察看、動手、寫紙等）。
+對白用這個人物會說的話，可以口語；thought、goal_update、日記用書面。
 move 的 to 可以是相鄰地名或 id，也可以是你聽說、以為存在的地方；走不到或沒有那地方時，你會感知到。
-若你點了在場之人的名，工具會先讓對方反應，再由裁判判定雙方實際做成什麼，把你能感知到的結果回給你。
+若你點了在場之人的名，工具會先讓對方反應，再由裁判判定雙方實際做成甚麼，把你能感知到的結果回給你。
 對方不理、走開、或已來回三次，這場對持即止。
 
 最後輸出 JSON 形的心思：thought、goal_update、mood。不要敘述世界。
@@ -225,7 +226,7 @@ async def _complete_held_interact(deps: ActorDeps, b_text: str | None) -> dict[s
 
 async def dispatch_action_async(deps: ActorDeps, action: Action) -> dict[str, Any]:
     if deps.mutates_used >= deps.mutate_budget:
-        return {"ok": False, "reason": "budget", "detail": "這一時辰你已動得夠多。"}
+        return {"ok": False, "reason": "budget", "detail": "這一輪你已經動得夠多。"}
     _activity_for(deps, action)
     deps.mutates_used += 1
 
@@ -431,7 +432,7 @@ class ActorAgent:
                 result = await dispatch_action_async(ctx.deps, MoveAction(to=to))
                 return format_action_return(ctx.deps.world, ctx.deps.actor_id, result)
 
-        prompt = "在這一時辰行動。用工具改世界，再交出心思。"
+        prompt = "在這一輪行動。用工具改世界，再交出心思。"
         if deps.extra:
             prompt = deps.extra + "\n" + prompt
         out = await agent.run(prompt, deps=deps)

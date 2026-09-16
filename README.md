@@ -2,9 +2,9 @@
 
 A small sealed-canon story simulation. You design a town, let characters act, inject world events, and **steer** future plot without rewriting what already happened.
 
-The sim writes in **Taiwan Traditional Chinese** (書面語 for narration, diaries, tape, and chapters; spoken register for dialogue). IDs stay English.
+The sim writes in **Hong Kong Traditional Chinese** (香港書面語 for narration, diaries, tape, and chapters; dialogue may carry spoken HK flavor, but the house style is written Chinese, not 粵語口語入文). IDs stay English.
 
-Stories are first-class objects. Each story has a **setup** (worldview, map, cast) and, once started, a sealed **canon**. Harbor's End / 港尾 is the first seeded live story: four people, six places, a stolen skiff, an affair, a storm in three days.
+Stories are first-class objects. Each story has a **setup** (worldview, map, cast) and, once started, a sealed **canon**. Harbor's End / 港尾 is the first seeded live story: a New Territories fishing harbor, four people, six places, a stolen skiff, an affair, a storm in three days.
 
 While a story is live, the owner cannot edit the birth sheet — only god tools (inject / steer). **重置世界** is temporary scaffolding: it unseals the story back to draft so you can edit setup again. It will be removed once stories are unique and irreplaceable.
 

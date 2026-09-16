@@ -143,7 +143,7 @@ class Simulation:
         note = (self.world.meta("clock") or "").strip()
         if not note:
             return "鎮上的壓力還沒落地。"
-        return f"局勢未歇：{note}"
+        return f"局勢還沒完：{note}"
 
     def _should_pressure(self) -> bool:
         brewing = self.world.cx.execute(
@@ -215,7 +215,7 @@ class Simulation:
         return self.event_agent.inject(self.world, text, kind="world")
 
     def _roll_day(self) -> dict[str, Any] | None:
-        self.world.set_activity("writing", actor="writer", detail="章回正在寫成")
+        self.world.set_activity("writing", actor="writer", detail="正在寫今日章節")
         day = self.world.day
         chapter = self.writer_agent.write(self.world, day)
         self.world.set_meta("day", str(day + 1))
@@ -266,7 +266,7 @@ class Simulation:
                 slot["encounter"] = True
         else:
             self.world.set_activity(
-                "injecting", actor="storyteller", detail="世變將至"
+                "injecting", actor="storyteller", detail="世變快到了"
             )
             result = self._run_event_slot(slot)
             slot["status"] = "done"

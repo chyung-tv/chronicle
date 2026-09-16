@@ -16,14 +16,14 @@ from playout.models import (
     StorySetup,
     StorySketch,
 )
-from playout.zh import with_prose
+from playout.zh import DESC_UNSET, MOOD_DEFAULT, NATURE_UNSET, VOICE_UNSET, WANT_UNSET, with_prose
 
 WIZARD_SYSTEM = with_prose("""你是故事巫師。人交來一份速寫（地名、人物一句話、開局兩段）。你把它補成可開演的世界設定。
 
 規則：
-- 只回傳 JSON，繁體中文。
+- 只回傳 JSON，香港繁體中文書面語。
 - 尊重速寫：不改原有人物與地點的 id、座標、與路。不可刪原有人物或地點。
-- 為每人補 name（若空）、voice、want、secret、constitution、goal、mood。
+- 為每人補 name（若空）、voice、want、secret、constitution、goal、mood。voice 用書面描述說話方式；不要把設定正文寫成粵語口語。
 - 為每處補 name（若空）與 description。
 - 若原有人物少於 8、地點少於 8，可增添少數配角或側景（新 id），讓世界更厚。已滿則只豐富，不新增。
 - 可把開場情勢與開場事件寫得更具體，但不要加完結日數或倒數。
@@ -58,7 +58,7 @@ def stitch(sketch: StorySketch, drafted: StorySetup) -> StorySetup:
             LocationSetup(
                 id=loc.id,
                 name=(filled.name if filled and filled.name else loc.name) or loc.id,
-                description=(filled.description if filled else "") or loc.note or "尚無描述。",
+                description=(filled.description if filled else "") or loc.note or DESC_UNSET,
                 x=loc.x,
                 y=loc.y,
             )
@@ -77,8 +77,8 @@ def stitch(sketch: StorySketch, drafted: StorySetup) -> StorySetup:
                     id=act.id,
                     name=act.name or act.id,
                     location=act.location if act.location in loc_ids else locations[0].id,
-                    want=act.note or "尚未定願。",
-                    constitution=act.note or "尚未定性。",
+                    want=act.note or WANT_UNSET,
+                    constitution=act.note or NATURE_UNSET,
                 )
                 for act in sketch.actors
             ],
@@ -92,18 +92,18 @@ def stitch(sketch: StorySketch, drafted: StorySetup) -> StorySetup:
         filled = act_by_id.get(act.id)
         place = act.location if act.location in loc_ids else home
         name = (filled.name if filled and filled.name else act.name) or act.id
-        want = (filled.want if filled else "") or act.note or "尚未定願。"
+        want = (filled.want if filled else "") or act.note or WANT_UNSET
         actors.append(
             ActorSetup(
                 id=act.id,
                 name=name,
                 location=place,
-                voice=(filled.voice if filled else "") or "尚未定腔。",
+                voice=(filled.voice if filled else "") or VOICE_UNSET,
                 want=want,
                 secret=(filled.secret if filled else "") or "",
-                constitution=(filled.constitution if filled else "") or (act.note or "尚未定性。"),
+                constitution=(filled.constitution if filled else "") or (act.note or NATURE_UNSET),
                 goal=(filled.goal if filled else "") or want,
-                mood=(filled.mood if filled else "") or "靜",
+                mood=(filled.mood if filled else "") or MOOD_DEFAULT,
             )
         )
     actor_ids = {a.id for a in actors}
@@ -219,7 +219,7 @@ def mock_enrich(sketch: StorySketch) -> StorySetup:
         LocationSetup(
             id=loc.id,
             name=loc.name or loc.id,
-            description=loc.note or f"{loc.name or loc.id}。尚待細寫。",
+            description=loc.note or f"{loc.name or loc.id}。還待細寫。",
             x=loc.x,
             y=loc.y,
         )
@@ -228,18 +228,18 @@ def mock_enrich(sketch: StorySketch) -> StorySetup:
     home = locations[0].id
     actors = []
     for act in sketch.actors:
-        note = act.note or "尚未定願。"
+        note = act.note or WANT_UNSET
         actors.append(
             ActorSetup(
                 id=act.id,
                 name=act.name or act.id,
                 location=act.location or home,
-                voice=f"{act.name or act.id}的口吻尚未定，只知：{note}",
+                voice=f"{act.name or act.id}的聲線未定，只知：{note}",
                 want=note,
                 secret="",
                 constitution=note,
                 goal=note,
-                mood="靜",
+                mood=MOOD_DEFAULT,
             )
         )
     objects = [
@@ -261,7 +261,7 @@ def mock_enrich(sketch: StorySketch) -> StorySetup:
         title=sketch.title,
         turns_per_day_min=n,
         turns_per_day_max=sketch.turns_per_day_max,
-        worldview=sketch.worldview or "這是一個尚待寫清的世界。世上無神異。",
+        worldview=sketch.worldview or "這是一個還待寫清的世界。世上沒有神異。",
         opening_situation=sketch.opening_situation,
         opening_events=sketch.opening_events,
         locations=locations,
@@ -290,7 +290,7 @@ def enrich(
             on_progress("正在核對設定", 0.7)
         return mock_enrich(sketch)
     if on_progress:
-        on_progress("正在請示語言模型", 0.4)
+        on_progress("正在請語言模型補完", 0.4)
     data: dict[str, Any] = llm.complete_json(
         WIZARD_SYSTEM, _user_payload(sketch), strong=True
     )
@@ -301,7 +301,7 @@ def enrich(
         return stitch(sketch, drafted)
     except Exception:
         if on_progress:
-            on_progress("正在請示語言模型", 0.55)
+            on_progress("正在請語言模型補完", 0.55)
         data2 = llm.complete_json(
             WIZARD_SYSTEM,
             _user_payload(sketch) + "\n\n只回傳合法 JSON。保留原有 id。配角與側景可用新 id。",

@@ -44,7 +44,7 @@ def _run_wizard(store: StoryStore, job: dict[str, Any]) -> None:
 
     rec = store.require(job["story_id"])
     sketch = StorySketch.model_validate(rec.sketch() or {})
-    jobs.bump(store, job["id"], detail="正在請示語言模型", progress=0.35)
+    jobs.bump(store, job["id"], detail="正在請語言模型補完", progress=0.35)
 
     def on_progress(detail: str, progress: float) -> None:
         jobs.bump(store, job["id"], detail=detail, progress=progress)

@@ -8,9 +8,9 @@ from playout.canon import World
 from playout.llm import LLM
 
 ENCOUNTER_EXTRA = (
-    "有人剛要與你互動。你須用 interact 寫出你此刻試圖做的事"
+    "有人剛要與你互動。你要用 interact 寫出你此刻試圖做的事"
     "（開口、還手、搶物、離開某地等），或 wait 不理。"
-    "這不是你自己的時辰；只動一次。不可再開對持。"
+    "這不是你自己這一輪；只動一次。不可再開對持。"
     "不要用 move 工具；若要走，把目的地寫進 interact，由裁判判定。"
 )
 
