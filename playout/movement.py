@@ -86,7 +86,7 @@ def evaluate_move(world: World, intent: MoveIntent) -> MoveResolution:
             )
         if dest_id not in world.adjacent(here):
             reason, self_p = "not_adjacent", "那地方並不相鄰。"
-        summary = f"{actor['name']}無法從這裏前往{dest_name}。"
+            summary = f"{actor['name']}無法從這裏前往{dest_name}。"
         else:
             reason, self_p = "ruined", f"{dest_name}已毀。"
             summary = f"{actor['name']}見{dest_name}已毀，無路可入。"
